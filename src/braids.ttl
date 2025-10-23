@@ -32,7 +32,7 @@
 		lv2:symbol "shape" ;
 		lv2:name "Shape" ;
 		pg:group braids:oscillator ;
-		lv2:displayPriority 1 ;
+		lv2:displayPriority 5 ;
 		lv2:default 0 ;
 		lv2:minimum 0 ;
 		lv2:maximum 47 ;
@@ -190,7 +190,7 @@
 		lv2:symbol "fine" ;
 		lv2:name "Fine Tune" ;
 		pg:group braids:oscillator ;
-		lv2:displayPriority 2 ;
+		lv2:displayPriority 4 ;
 		lv2:default 0.0 ;
 		lv2:minimum -2.0 ;
 		lv2:maximum 2.0 ;
@@ -214,7 +214,7 @@
 		lv2:symbol "timbre" ;
 		lv2:name "Timbre" ;
 		pg:group braids:oscillator ;
-		lv2:displayPriority 4 ;
+		lv2:displayPriority 2 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -225,7 +225,7 @@
 		lv2:symbol "color" ;
 		lv2:name "Color" ;
 		pg:group braids:oscillator ;
-		lv2:displayPriority 5 ;
+		lv2:displayPriority 1 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -236,7 +236,7 @@
 		lv2:symbol "env_attack" ;
 		lv2:name "Envelope Attack" ;
 		pg:group braids:envelope ;
-		lv2:displayPriority 1 ;
+		lv2:displayPriority 7 ;
 		lv2:default 0.1 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -247,7 +247,7 @@
 		lv2:symbol "env_decay" ;
 		lv2:name "Envelope Decay" ;
 		pg:group braids:envelope ;
-		lv2:displayPriority 3 ;
+		lv2:displayPriority 5 ;
 		lv2:default 0.3 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -258,7 +258,7 @@
 		lv2:symbol "env_sustain" ;
 		lv2:name "Envelope Sustain" ;
 		pg:group braids:envelope ;
-		lv2:displayPriority 5 ;
+		lv2:displayPriority 3 ;
 		lv2:default 0.7 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -269,7 +269,7 @@
 		lv2:symbol "env_release" ;
 		lv2:name "Envelope Release" ;
 		pg:group braids:envelope ;
-		lv2:displayPriority 7 ;
+		lv2:displayPriority 1 ;
 		lv2:default 0.3 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -280,7 +280,7 @@
 		lv2:symbol "env_attack_shape" ;
 		lv2:name "Envelope Attack Shape" ;
 		pg:group braids:envelope ;
-		lv2:displayPriority 2 ;
+		lv2:displayPriority 6 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -302,7 +302,7 @@
 		lv2:symbol "env_release_shape" ;
 		lv2:name "Envelope Release Shape" ;
 		pg:group braids:envelope ;
-		lv2:displayPriority 6 ;
+		lv2:displayPriority 2 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
