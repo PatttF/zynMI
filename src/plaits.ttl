@@ -32,7 +32,7 @@
 		lv2:symbol "model" ;
 		lv2:name "Model" ;
 		pg:group plaits:oscillator ;
-		lv2:displayPriority 1 ;
+		lv2:displayPriority 5 ;
 		lv2:default 0 ;
 		lv2:minimum 0 ;
 		lv2:maximum 15 ;
@@ -94,7 +94,7 @@
 		lv2:symbol "freq" ;
 		lv2:name "Frequency" ;
 		pg:group plaits:oscillator ;
-		lv2:displayPriority 2 ;
+		lv2:displayPriority 4 ;
 		lv2:default 0.0 ;
 		lv2:minimum -48.0 ;
 		lv2:maximum 48.0 ;
@@ -117,7 +117,7 @@
 		lv2:symbol "timbre" ;
 		lv2:name "Timbre" ;
 		pg:group plaits:oscillator ;
-		lv2:displayPriority 4 ;
+		lv2:displayPriority 2 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -128,7 +128,7 @@
 		lv2:symbol "morph" ;
 		lv2:name "Morph" ;
 		pg:group plaits:oscillator ;
-		lv2:displayPriority 5 ;
+		lv2:displayPriority 1 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -139,7 +139,7 @@
 		lv2:symbol "lpg_color" ;
 		lv2:name "LPG Color" ;
 		pg:group plaits:lpg ;
-		lv2:displayPriority 1 ;
+		lv2:displayPriority 2 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -150,7 +150,7 @@
 		lv2:symbol "lpg_decay" ;
 		lv2:name "LPG Decay" ;
 		pg:group plaits:lpg ;
-		lv2:displayPriority 2 ;
+		lv2:displayPriority 1 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -161,7 +161,7 @@
 		lv2:symbol "env_attack" ;
 		lv2:name "Envelope Attack" ;
 		pg:group plaits:envelope ;
-		lv2:displayPriority 1 ;
+		lv2:displayPriority 7 ;
 		lv2:default 0.1 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -172,7 +172,7 @@
 		lv2:symbol "env_decay" ;
 		lv2:name "Envelope Decay" ;
 		pg:group plaits:envelope ;
-		lv2:displayPriority 3 ;
+		lv2:displayPriority 5 ;
 		lv2:default 0.3 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -183,7 +183,7 @@
 		lv2:symbol "env_sustain" ;
 		lv2:name "Envelope Sustain" ;
 		pg:group plaits:envelope ;
-		lv2:displayPriority 5 ;
+		lv2:displayPriority 3 ;
 		lv2:default 0.7 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -194,7 +194,7 @@
 		lv2:symbol "env_release" ;
 		lv2:name "Envelope Release" ;
 		pg:group plaits:envelope ;
-		lv2:displayPriority 7 ;
+		lv2:displayPriority 1 ;
 		lv2:default 0.3 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -205,7 +205,7 @@
 		lv2:symbol "env_attack_shape" ;
 		lv2:name "Envelope Attack Shape" ;
 		pg:group plaits:envelope ;
-		lv2:displayPriority 2 ;
+		lv2:displayPriority 6 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
@@ -227,7 +227,7 @@
 		lv2:symbol "env_release_shape" ;
 		lv2:name "Envelope Release Shape" ;
 		pg:group plaits:envelope ;
-		lv2:displayPriority 6 ;
+		lv2:displayPriority 2 ;
 		lv2:default 0.5 ;
 		lv2:minimum 0.0 ;
 		lv2:maximum 1.0 ;
