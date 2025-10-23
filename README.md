@@ -1,6 +1,6 @@
 # Mutable Instruments LV2 Plugins
 
-ARM64 LV2 plugins for Zynthian featuring Plaits and Braids oscillators with Stages envelopes.
+Plugins for Zynthian featuring Plaits and Braids oscillators with Stages envelopes. Thanks to Mutable Instruments for all of the wonderful work and for releasing open source.
 ## Building
 
 ```bash
