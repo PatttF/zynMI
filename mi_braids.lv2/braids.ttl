@@ -1,0 +1,537 @@
+@prefix doap:  <http://usefulinc.com/ns/doap#> .
+@prefix lv2:   <http://lv2plug.in/ns/lv2core#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix units: <http://lv2plug.in/ns/extensions/units#> .
+@prefix atom:  <http://lv2plug.in/ns/ext/atom#> .
+@prefix midi:  <http://lv2plug.in/ns/ext/midi#> .
+@prefix urid:  <http://lv2plug.in/ns/ext/urid#> .
+@prefix pg:    <http://lv2plug.in/ns/ext/port-groups#> .
+@prefix braids: <http://mutable-instruments.net/plugins/braids#> .
+
+<http://mutable-instruments.net/plugins/braids>
+	a lv2:Plugin ,
+		lv2:InstrumentPlugin ;
+	doap:name "MI Braids+" ;
+	doap:license <http://opensource.org/licenses/gpl-3.0> ;
+	lv2:project <http://mutable-instruments.net> ;
+	lv2:optionalFeature urid:map ;
+	lv2:port [
+		a lv2:InputPort ,
+			atom:AtomPort ;
+		atom:bufferType atom:Sequence ;
+		atom:supports midi:MidiEvent ;
+		lv2:designation lv2:control ;
+		lv2:index 0 ;
+		lv2:symbol "midi_in" ;
+		lv2:name "MIDI In" ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 1 ;
+		lv2:symbol "shape" ;
+		lv2:name "Shape" ;
+		pg:group braids:oscillator ;
+		lv2:displayPriority 5 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 47 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "CSAW" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Morph" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Saw Square" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Sine Triangle" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Buzz" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Square Sub" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Saw Sub" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Square Sync" ;
+			rdf:value 7
+		] , [
+			rdfs:label "Saw Sync" ;
+			rdf:value 8
+		] , [
+			rdfs:label "Triple Saw" ;
+			rdf:value 9
+		] , [
+			rdfs:label "Triple Square" ;
+			rdf:value 10
+		] , [
+			rdfs:label "Triple Triangle" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Triple Sine" ;
+			rdf:value 12
+		] , [
+			rdfs:label "Triple Ring Mod" ;
+			rdf:value 13
+		] , [
+			rdfs:label "Saw Swarm" ;
+			rdf:value 14
+		] , [
+			rdfs:label "Saw Comb" ;
+			rdf:value 15
+		] , [
+			rdfs:label "Toy" ;
+			rdf:value 16
+		] , [
+			rdfs:label "Digital Filter LP" ;
+			rdf:value 17
+		] , [
+			rdfs:label "Digital Filter PK" ;
+			rdf:value 18
+		] , [
+			rdfs:label "Digital Filter BP" ;
+			rdf:value 19
+		] , [
+			rdfs:label "Digital Filter HP" ;
+			rdf:value 20
+		] , [
+			rdfs:label "VOSIM" ;
+			rdf:value 21
+		] , [
+			rdfs:label "Vowel" ;
+			rdf:value 22
+		] , [
+			rdfs:label "Vowel FOF" ;
+			rdf:value 23
+		] , [
+			rdfs:label "Harmonics" ;
+			rdf:value 24
+		] , [
+			rdfs:label "FM" ;
+			rdf:value 25
+		] , [
+			rdfs:label "Feedback FM" ;
+			rdf:value 26
+		] , [
+			rdfs:label "Chaotic Feedback FM" ;
+			rdf:value 27
+		] , [
+			rdfs:label "Plucked" ;
+			rdf:value 28
+		] , [
+			rdfs:label "Bowed" ;
+			rdf:value 29
+		] , [
+			rdfs:label "Blown" ;
+			rdf:value 30
+		] , [
+			rdfs:label "Fluted" ;
+			rdf:value 31
+		] , [
+			rdfs:label "Struck Bell" ;
+			rdf:value 32
+		] , [
+			rdfs:label "Struck Drum" ;
+			rdf:value 33
+		] , [
+			rdfs:label "Kick" ;
+			rdf:value 34
+		] , [
+			rdfs:label "Cymbal" ;
+			rdf:value 35
+		] , [
+			rdfs:label "Snare" ;
+			rdf:value 36
+		] , [
+			rdfs:label "Wavetables" ;
+			rdf:value 37
+		] , [
+			rdfs:label "Wave Map" ;
+			rdf:value 38
+		] , [
+			rdfs:label "Wave Line" ;
+			rdf:value 39
+		] , [
+			rdfs:label "Wave Paraphonic" ;
+			rdf:value 40
+		] , [
+			rdfs:label "Filtered Noise" ;
+			rdf:value 41
+		] , [
+			rdfs:label "Twin Peaks Noise" ;
+			rdf:value 42
+		] , [
+			rdfs:label "Clocked Noise" ;
+			rdf:value 43
+		] , [
+			rdfs:label "Granular Cloud" ;
+			rdf:value 44
+		] , [
+			rdfs:label "Particle Noise" ;
+			rdf:value 45
+		] , [
+			rdfs:label "Digital Modulation" ;
+			rdf:value 46
+		] , [
+			rdfs:label "Question Mark" ;
+			rdf:value 47
+		]
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 2 ;
+		lv2:symbol "fine" ;
+		lv2:name "Fine Tune" ;
+		pg:group braids:oscillator ;
+		lv2:displayPriority 4 ;
+		lv2:default 0.0 ;
+		lv2:minimum -2.0 ;
+		lv2:maximum 2.0 ;
+		units:unit units:semitone12TET ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 3 ;
+		lv2:symbol "coarse" ;
+		lv2:name "Coarse Tune" ;
+		pg:group braids:oscillator ;
+		lv2:displayPriority 3 ;
+		lv2:default 0.0 ;
+		lv2:minimum -24.0 ;
+		lv2:maximum 24.0 ;
+		units:unit units:semitone12TET ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 4 ;
+		lv2:symbol "timbre" ;
+		lv2:name "Timbre" ;
+		pg:group braids:oscillator ;
+		lv2:displayPriority 2 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 5 ;
+		lv2:symbol "color" ;
+		lv2:name "Color" ;
+		pg:group braids:oscillator ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 6 ;
+		lv2:symbol "env_attack" ;
+		lv2:name "Envelope Attack" ;
+		pg:group braids:envelope ;
+		lv2:displayPriority 7 ;
+		lv2:default 0.1 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 7 ;
+		lv2:symbol "env_decay" ;
+		lv2:name "Envelope Decay" ;
+		pg:group braids:envelope ;
+		lv2:displayPriority 5 ;
+		lv2:default 0.3 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 8 ;
+		lv2:symbol "env_sustain" ;
+		lv2:name "Envelope Sustain" ;
+		pg:group braids:envelope ;
+		lv2:displayPriority 3 ;
+		lv2:default 0.7 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 9 ;
+		lv2:symbol "env_release" ;
+		lv2:name "Envelope Release" ;
+		pg:group braids:envelope ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.8 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 10 ;
+		lv2:symbol "env_attack_shape" ;
+		lv2:name "Envelope Attack Shape" ;
+		pg:group braids:envelope ;
+		lv2:displayPriority 6 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 11 ;
+		lv2:symbol "env_decay_shape" ;
+		lv2:name "Envelope Decay Shape" ;
+		pg:group braids:envelope ;
+		lv2:displayPriority 4 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 12 ;
+		lv2:symbol "env_release_shape" ;
+		lv2:name "Envelope Release Shape" ;
+		pg:group braids:envelope ;
+		lv2:displayPriority 2 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:AudioPort ;
+		lv2:index 13 ;
+		lv2:symbol "trig_in" ;
+		lv2:name "Trig In" ;
+	] , [
+		a lv2:InputPort ,
+			lv2:AudioPort ;
+		lv2:index 14 ;
+		lv2:symbol "pitch_in" ;
+		lv2:name "Pitch In (1V/oct)" ;
+	] , [
+		a lv2:InputPort ,
+			lv2:AudioPort ;
+		lv2:index 15 ;
+		lv2:symbol "fm_in" ;
+		lv2:name "FM In" ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 16 ;
+		lv2:symbol "rings_enable" ;
+		lv2:name "Rings Enable" ;
+		pg:group braids:rings ;
+		lv2:displayPriority 10 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 1 ;
+		lv2:portProperty lv2:integer ,
+			lv2:toggled ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 17 ;
+		lv2:symbol "rings_polyphony" ;
+		lv2:name "Rings Polyphony" ;
+		pg:group braids:rings ;
+		lv2:displayPriority 8 ;
+		lv2:default 1 ;
+		lv2:minimum 1 ;
+		lv2:maximum 4 ;
+		lv2:portProperty lv2:integer ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 18 ;
+		lv2:symbol "rings_model" ;
+		lv2:name "Rings Model" ;
+		pg:group braids:rings ;
+		lv2:displayPriority 7 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 5 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "Modal" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Sympathetic String" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Modulated/Inharmonic String" ;
+			rdf:value 2
+		] , [
+			rdfs:label "2-OP FM" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Sympathetic String (Quantized)" ;
+			rdf:value 4
+		] , [
+			rdfs:label "String & Reverb" ;
+			rdf:value 5
+		]
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 19 ;
+		lv2:symbol "rings_frequency" ;
+		lv2:name "Rings Frequency" ;
+		pg:group braids:rings ;
+		lv2:displayPriority 6 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 20 ;
+		lv2:symbol "rings_structure" ;
+		lv2:name "Rings Structure" ;
+		pg:group braids:rings ;
+		lv2:displayPriority 5 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 21 ;
+		lv2:symbol "rings_brightness" ;
+		lv2:name "Rings Brightness" ;
+		pg:group braids:rings ;
+		lv2:displayPriority 4 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 22 ;
+		lv2:symbol "rings_damping" ;
+		lv2:name "Rings Damping" ;
+		pg:group braids:rings ;
+		lv2:displayPriority 3 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 23 ;
+		lv2:symbol "rings_position" ;
+		lv2:name "Rings Position" ;
+		pg:group braids:rings ;
+		lv2:displayPriority 2 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 24 ;
+		lv2:symbol "filter_type" ;
+		lv2:name "Filter Type" ;
+		lv2:portProperty lv2:integer ;
+		lv2:portProperty lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "Off" ;
+			rdf:value 0 ;
+		] , [
+			rdfs:label "Moog Ladder" ;
+			rdf:value 1 ;
+		] , [
+			rdfs:label "MS20" ;
+			rdf:value 2 ;
+		] , [
+			rdfs:label "SVF Lowpass" ;
+			rdf:value 3 ;
+		] , [
+			rdfs:label "SVF Bandpass" ;
+			rdf:value 4 ;
+		] , [
+			rdfs:label "SVF Highpass" ;
+			rdf:value 5 ;
+		] , [
+			rdfs:label "One-Pole LP" ;
+			rdf:value 6 ;
+		] ;
+		pg:group braids:filter ;
+		lv2:displayPriority 10 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 6 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 25 ;
+		lv2:symbol "filter_cutoff" ;
+		lv2:name "Filter Cutoff" ;
+		pg:group braids:filter ;
+		lv2:displayPriority 9 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:InputPort ,
+			lv2:ControlPort ;
+		lv2:index 26 ;
+		lv2:symbol "filter_resonance" ;
+		lv2:name "Filter Resonance" ;
+		pg:group braids:filter ;
+		lv2:displayPriority 8 ;
+		lv2:default 0.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+	] , [
+		a lv2:OutputPort ,
+			lv2:AudioPort ;
+		lv2:index 27 ;
+		lv2:symbol "out_l" ;
+		lv2:name "Out L" ;
+	] , [
+		a lv2:OutputPort ,
+			lv2:AudioPort ;
+		lv2:index 28 ;
+		lv2:symbol "out_r" ;
+		lv2:name "Out R" ;
+	] .
+
+braids:rings
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Rings Resonator" ;
+	lv2:symbol "rings" ;
+	lv2:displayPriority 1 .
+
+braids:oscillator
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Oscillator" ;
+	lv2:symbol "oscillator" ;
+	lv2:displayPriority 4 .
+
+braids:envelope
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Envelope" ;
+	lv2:symbol "envelope" ;
+	lv2:displayPriority 3 .
+
+braids:filter
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Filter" ;
+	lv2:symbol "filter" ;
+	lv2:displayPriority 2 .
+
