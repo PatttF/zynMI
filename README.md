@@ -1,14 +1,21 @@
 # Mutable Instruments LV2 Plugins
 
-Plugins for Zynthian featuring Plaits and Braids oscillators with Stages envelopes. Thanks to Mutable Instruments for all of the wonderful work and for releasing open source and the Zynthian team for building a great platform.
+ARM64(for Zynthian) and Linux x86-64 LV2 plugins featuring Plaits and Braids macro oscillators with Rings resonator, 7 filter types, and Marbles random generator.
+
 ## Building
 
 ```bash
-# Build both plugins
+# Build all plugins for both x86_64 (testing) and aarch64 (Zynthian)
 make all
 
-# Install to aarch64-build/
-make install
+# Build for specific architecture
+make x86_64    # Native testing
+make aarch64   # Zynthian ARM64
+
+# Build individual plugins
+make plaits
+make braids
+make marbles
 
 # Verify bundles
 make verify
@@ -29,15 +36,29 @@ make install  # Shows the deploy command
 
 ## Features
 
-### Plaits
-- 16 synthesis models (virtual analog, FM, physical modeling, drums, etc.)
-- Full ADSR envelope with shape controls
-- LPG (Low Pass Gate) with color and decay
-- Stereo output
+### MI Plaits+
 
-### Braids
-- 48 synthesis algorithms
-- Full ADSR envelope with shape controls
-- Fine/Coarse tuning
-- Timbre and Color controls
-- Mono output
+- **16 synthesis models**: Virtual analog, FM, physical modeling, granular, speech, drums
+- **Rings resonator**: 6 models (Modal, Sympathetic String, Inharmonic, FM, Quantized, Reverb)
+- **7 filter types**: Moog Ladder, MS20, SVF (LP/BP/HP), One-Pole LP
+- **Full ADSR envelope** with attack/decay/release shape controls
+- **LPG (Low Pass Gate)** with color and decay
+
+
+### MI Braids+
+
+- **48 synthesis algorithms**: Analog modeling, digital, FM, physical modeling, noise, percussion
+- **Rings resonator**: 6 models (Modal, Sympathetic String, Inharmonic, FM, Quantized, Reverb)
+- **7 filter types**: Moog Ladder, MS20, SVF (LP/BP/HP), One-Pole LP
+- **Full ADSR envelope** with attack/decay/release shape controls
+
+### MI Marbles
+
+- **MIDI random generator** with host tempo sync
+- **T outputs**: 3 channels of random voltages/gates
+  - Rate: -48 to +48 semitones (with tempo sync)
+  - Bias, Jitter, Steps, Length controls
+  - Mode: Async/Locked/Locked with Ratcheting
+  - Range: Slow (÷16), Medium (1x), Fast (×16)
+- **X/Y outputs**: 3 channels each of smooth random voltages
+  - Spread, Bias, Steps controls
