@@ -1,6 +1,6 @@
 # Mutable Instruments LV2 Plugins
 
-ARM64(for Zynthian) and Linux x86-64 LV2 plugins featuring Plaits and Braids macro oscillators with Rings resonator, 7 filter types, and Marbles random generator.
+ARM64(for Zynthian) and Linux x86-64 LV2 plugins featuring Plaits and Braids macro oscillators with Rings resonator, 7 filter types, and Marbles random generator. Thanks go out to Mutable Instruments and Zynthian. 
 
 ## Building
 
