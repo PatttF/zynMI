@@ -238,4 +238,3 @@ help:
 	@echo "  scp -r aarch64-build/*.lv2 root@zynthian.local:/zynthian/zynthian-plugins/lv2/"
 
 .PHONY: all x86_64 aarch64 plugins plaits braids marbles install verify clean help
-
