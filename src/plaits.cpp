@@ -106,9 +106,12 @@ typedef struct {
     rings::PerformanceState rings_performance_state;
     uint16_t rings_reverb_buffer[32768];
     float rings_in[24];
-    float rings_out[24];
-    float rings_aux[24];
+    float rings_out_ring[256];  // Ring buffer for continuous output
+    float rings_aux_ring[256];
+    uint32_t rings_output_write_idx;
+    uint32_t rings_output_read_idx;
     int rings_buffer_index;
+    bool rings_last_strum;
     
     // Filter DSP - stereo SVF filters
     stmlib::Svf filter_left;
@@ -192,16 +195,22 @@ instantiate(const LV2_Descriptor* descriptor,
     plaits->block_index = 0;
     
     // Initialize Rings
+    memset(plaits->rings_reverb_buffer, 0, sizeof(plaits->rings_reverb_buffer));
     plaits->rings_part.Init(plaits->rings_reverb_buffer);
     plaits->rings_strummer.Init(0.01f, rate / 24.0f);
     plaits->rings_buffer_index = 0;
+    plaits->rings_output_write_idx = 0;
+    plaits->rings_output_read_idx = 0;
+    plaits->rings_last_strum = false;
     memset(plaits->rings_in, 0, sizeof(plaits->rings_in));
-    memset(plaits->rings_out, 0, sizeof(plaits->rings_out));
-    memset(plaits->rings_aux, 0, sizeof(plaits->rings_aux));
+    memset(plaits->rings_out_ring, 0, sizeof(plaits->rings_out_ring));
+    memset(plaits->rings_aux_ring, 0, sizeof(plaits->rings_aux_ring));
     
+    plaits->rings_performance_state.strum = false;
     plaits->rings_performance_state.internal_exciter = true;
     plaits->rings_performance_state.internal_strum = false;
     plaits->rings_performance_state.internal_note = false;
+    plaits->rings_performance_state.note = 60.0f;
     plaits->rings_performance_state.tonic = 12.0f;
     plaits->rings_performance_state.fm = 0.0f;
     plaits->rings_performance_state.chord = 0;
@@ -578,6 +587,10 @@ run(LV2_Handle instance, uint32_t n_samples)
         float env_values[24];
         uint32_t env_offset = 0;
         
+        // Save the trigger state for use after envelope processing
+        // Don't modify new_note_triggered until after we use it for modulations
+        bool env_needs_retrigger = new_note_triggered;
+        
         while (env_offset < block_size) {
             uint32_t env_block = block_size - env_offset;
             if (env_block > BLOCK_SIZE) {
@@ -588,9 +601,8 @@ run(LV2_Handle instance, uint32_t n_samples)
                 stmlib::GateFlags current = gate_high ? stmlib::GATE_FLAG_HIGH : stmlib::GATE_FLAG_LOW;
                 
                 // Force retrigger on new note, even during legato
-                if (i == 0 && new_note_triggered) {
+                if (i == 0 && env_offset == 0 && env_needs_retrigger) {
                     current |= stmlib::GATE_FLAG_RISING;
-                    new_note_triggered = false;
                 } else if (gate_high && !(plaits->last_gate_flag & stmlib::GATE_FLAG_HIGH)) {
                     current |= stmlib::GATE_FLAG_RISING;
                 }
@@ -625,8 +637,11 @@ run(LV2_Handle instance, uint32_t n_samples)
         modulations.frequency_patched = false;
         modulations.timbre_patched = false;
         modulations.morph_patched = false;
-        modulations.trigger_patched = false;
-        modulations.level_patched = false;
+        // Enable LPG trigger mode for MIDI notes
+        // When trigger_patched=true but level_patched=false, LPG generates its own envelope
+        // based on decay and color settings (instead of following external level)
+        modulations.trigger_patched = true;
+        modulations.level_patched = false;  // Let LPG generate envelope internally
         
         float trigger_value = 0.0f;
         if (plaits->note_on) {
@@ -634,7 +649,8 @@ run(LV2_Handle instance, uint32_t n_samples)
                 modulations.trigger = 1.0f;
                 new_note_triggered = false;
             }
-            modulations.level = plaits->gate_level;
+            // Set constant level when note is held (LPG will shape it)
+            modulations.level = 1.0f;
         } else {
             modulations.level = 0.0f;
             if (plaits->trigger_in) {
@@ -686,7 +702,7 @@ run(LV2_Handle instance, uint32_t n_samples)
             bool rings_enabled = plaits->rings_enable && (*plaits->rings_enable > 0.5f);
             
             if (rings_enabled) {
-                // Accumulate 24 samples for Rings processing
+                // Accumulate samples and process through Rings
                 for (uint32_t i = 0; i < block_size; i++) {
                     plaits->rings_in[plaits->rings_buffer_index] = plaits_out[i];
                     plaits->rings_buffer_index++;
@@ -703,23 +719,30 @@ run(LV2_Handle instance, uint32_t n_samples)
                         if (model >= rings::RESONATOR_MODEL_LAST) model = rings::RESONATOR_MODEL_LAST - 1;
                         plaits->rings_part.set_model((rings::ResonatorModel)model);
                         
-                        // Process Rings patch
+                        // Process Rings patch with proper clamping
                         rings::Patch rings_patch;
-                        rings_patch.brightness = plaits->rings_brightness ? *plaits->rings_brightness : 0.5f;
-                        rings_patch.damping = plaits->rings_damping ? *plaits->rings_damping : 0.5f;
-                        rings_patch.position = plaits->rings_position ? *plaits->rings_position : 0.5f;
-                        rings_patch.structure = plaits->rings_structure ? *plaits->rings_structure : 0.5f;
+                        float brightness = plaits->rings_brightness ? *plaits->rings_brightness : 0.5f;
+                        rings_patch.brightness = brightness < 0.0f ? 0.0f : (brightness > 1.0f ? 1.0f : brightness);
+                        float damping = plaits->rings_damping ? *plaits->rings_damping : 0.5f;
+                        rings_patch.damping = damping < 0.0f ? 0.0f : (damping > 0.9995f ? 0.9995f : damping);
+                        float position = plaits->rings_position ? *plaits->rings_position : 0.5f;
+                        rings_patch.position = position < 0.0f ? 0.0f : (position > 0.9995f ? 0.9995f : position);
+                        float structure = plaits->rings_structure ? *plaits->rings_structure : 0.5f;
+                        rings_patch.structure = structure < 0.0f ? 0.0f : (structure > 0.9995f ? 0.9995f : structure);
                         
                         // Setup performance state
                         rings::PerformanceState perf_state = plaits->rings_performance_state;
                         
-                        // Use internal exciter
-                        perf_state.internal_exciter = false;  // Use Plaits as exciter
+                        // Use Plaits as exciter
+                        perf_state.internal_exciter = false;
                         perf_state.internal_strum = false;
                         perf_state.internal_note = false;
                         
-                        // Trigger on note events
-                        perf_state.strum = plaits->note_on;
+                        // Detect strum on note-on transitions (rising edge)
+                        bool current_strum = plaits->note_on;
+                        bool strum_trigger = current_strum && !plaits->rings_last_strum;
+                        perf_state.strum = strum_trigger;
+                        plaits->rings_last_strum = current_strum;
                         
                         // Calculate frequency
                         float freq_transpose = plaits->rings_frequency ? (*plaits->rings_frequency - 0.5f) * 48.0f : 0.0f;
@@ -736,24 +759,60 @@ run(LV2_Handle instance, uint32_t n_samples)
                         // Process with Strummer
                         plaits->rings_strummer.Process(plaits->rings_in, 24, &perf_state);
                         
+                        // Temporary buffers for Rings output
+                        float rings_out_temp[24];
+                        float rings_aux_temp[24];
+                        
                         // Process through Rings
                         plaits->rings_part.Process(perf_state, rings_patch, plaits->rings_in, 
-                                                   plaits->rings_out, plaits->rings_aux, 24);
+                                                   rings_out_temp, rings_aux_temp, 24);
+                        
+                        // Write to ring buffers
+                        for (int j = 0; j < 24; j++) {
+                            plaits->rings_out_ring[plaits->rings_output_write_idx] = rings_out_temp[j];
+                            plaits->rings_aux_ring[plaits->rings_output_write_idx] = rings_aux_temp[j];
+                            plaits->rings_output_write_idx = (plaits->rings_output_write_idx + 1) % 256;
+                        }
                         
                         // Reset buffer
                         plaits->rings_buffer_index = 0;
                     }
                 }
                 
-                // Use Rings output (odd = left, aux = right)
-                // Apply mono mixing for stereo
+                // Read from ring buffer
                 for (uint32_t i = 0; i < block_size; i++) {
-                    float mixed = (plaits->rings_out[i] + plaits->rings_aux[i]) * 0.5f * 0.8f;
-                    rings_out_l[i] = mixed;
-                    rings_out_r[i] = mixed;
+                    // Check available samples
+                    uint32_t available;
+                    if (plaits->rings_output_write_idx >= plaits->rings_output_read_idx) {
+                        available = plaits->rings_output_write_idx - plaits->rings_output_read_idx;
+                    } else {
+                        available = 256 - plaits->rings_output_read_idx + plaits->rings_output_write_idx;
+                    }
+                    
+                    // Read sample or use zero-order hold
+                    if (available > 0) {
+                        float out_val = plaits->rings_out_ring[plaits->rings_output_read_idx];
+                        float aux_val = plaits->rings_aux_ring[plaits->rings_output_read_idx];
+                        plaits->rings_output_read_idx = (plaits->rings_output_read_idx + 1) % 256;
+                        
+                        // Mix to mono (Rings limiter already applies 0.8f internally)
+                        float mixed = (out_val + aux_val) * 0.5f;
+                        rings_out_l[i] = mixed;
+                        rings_out_r[i] = mixed;
+                    } else {
+                        // No samples - hold previous
+                        uint32_t prev_idx = (plaits->rings_output_read_idx > 0) ? (plaits->rings_output_read_idx - 1) : 255;
+                        float out_val = plaits->rings_out_ring[prev_idx];
+                        float aux_val = plaits->rings_aux_ring[prev_idx];
+                        float mixed = (out_val + aux_val) * 0.5f;
+                        rings_out_l[i] = mixed;
+                        rings_out_r[i] = mixed;
+                    }
                 }
             } else {
                 // Rings disabled - use Plaits output directly
+                // Reset buffer index to prevent stale data if re-enabled
+                plaits->rings_buffer_index = 0;
                 for (uint32_t i = 0; i < block_size; i++) {
                     rings_out_l[i] = plaits_out[i];
                     rings_out_r[i] = plaits_out[i];
@@ -762,6 +821,10 @@ run(LV2_Handle instance, uint32_t n_samples)
             
             // Apply filters
             int filter_type = plaits->filter_type ? (int)*plaits->filter_type : 0;
+            // Clamp filter_type to valid range [0, 6]
+            if (filter_type < 0) filter_type = 0;
+            if (filter_type > 6) filter_type = 6;
+            
             float filter_cutoff = plaits->filter_cutoff ? *plaits->filter_cutoff : 0.5f;
             float filter_resonance = plaits->filter_resonance ? *plaits->filter_resonance : 0.0f;
             
@@ -769,18 +832,7 @@ run(LV2_Handle instance, uint32_t n_samples)
             filter_cutoff = Clip(filter_cutoff, 0.001f, 0.999f);
             filter_resonance = Clip(filter_resonance, 0.0f, 1.0f);
             
-            // Filter state arrays (4 floats for ladder, 2 for others)
-            static float ladder_state_l[4] = {0};
-            static float ladder_state_r[4] = {0};
-            static float ms20_hp_l[2] = {0};
-            static float ms20_hp_r[2] = {0};
-            static float ms20_lp_l[2] = {0};
-            static float ms20_lp_r[2] = {0};
-            static float svf_state_l[2] = {0};
-            static float svf_state_r[2] = {0};
-            static float onepole_l[1] = {0};
-            static float onepole_r[1] = {0};
-            
+            // Use instance filter state (not static - critical for multi-instance support!)
             bool has_output = false;
             for (uint32_t i = 0; i < block_size; i++) {
                 float left = rings_out_l[i];
@@ -790,28 +842,28 @@ run(LV2_Handle instance, uint32_t n_samples)
                 if (filter_type > 0) {
                     if (filter_type == 1) {
                         // Moog ladder filter
-                        left = ProcessMoogLadder(left, ladder_state_l, filter_cutoff, filter_resonance);
-                        right = ProcessMoogLadder(right, ladder_state_r, filter_cutoff, filter_resonance);
+                        left = ProcessMoogLadder(left, plaits->ladder_state_left, filter_cutoff, filter_resonance);
+                        right = ProcessMoogLadder(right, plaits->ladder_state_right, filter_cutoff, filter_resonance);
                     } else if (filter_type == 2) {
                         // MS20 filter
-                        left = ProcessMS20Filter(left, ms20_hp_l, ms20_lp_l, filter_cutoff, filter_resonance);
-                        right = ProcessMS20Filter(right, ms20_hp_r, ms20_lp_r, filter_cutoff, filter_resonance);
+                        left = ProcessMS20Filter(left, plaits->ms20_hp_left, plaits->ms20_lp_left, filter_cutoff, filter_resonance);
+                        right = ProcessMS20Filter(right, plaits->ms20_hp_right, plaits->ms20_lp_right, filter_cutoff, filter_resonance);
                     } else if (filter_type == 3) {
                         // SVF Lowpass
-                        left = ProcessSVFLowpass(left, svf_state_l, filter_cutoff, filter_resonance);
-                        right = ProcessSVFLowpass(right, svf_state_r, filter_cutoff, filter_resonance);
+                        left = ProcessSVFLowpass(left, plaits->svf_state_left, filter_cutoff, filter_resonance);
+                        right = ProcessSVFLowpass(right, plaits->svf_state_right, filter_cutoff, filter_resonance);
                     } else if (filter_type == 4) {
                         // SVF Bandpass
-                        left = ProcessSVFBandpass(left, svf_state_l, filter_cutoff, filter_resonance);
-                        right = ProcessSVFBandpass(right, svf_state_r, filter_cutoff, filter_resonance);
+                        left = ProcessSVFBandpass(left, plaits->svf_state_left, filter_cutoff, filter_resonance);
+                        right = ProcessSVFBandpass(right, plaits->svf_state_right, filter_cutoff, filter_resonance);
                     } else if (filter_type == 5) {
                         // SVF Highpass
-                        left = ProcessSVFHighpass(left, svf_state_l, filter_cutoff, filter_resonance);
-                        right = ProcessSVFHighpass(right, svf_state_r, filter_cutoff, filter_resonance);
+                        left = ProcessSVFHighpass(left, plaits->svf_state_left, filter_cutoff, filter_resonance);
+                        right = ProcessSVFHighpass(right, plaits->svf_state_right, filter_cutoff, filter_resonance);
                     } else if (filter_type == 6) {
                         // One-Pole LP
-                        left = ProcessOnePole(left, onepole_l, filter_cutoff);
-                        right = ProcessOnePole(right, onepole_r, filter_cutoff);
+                        left = ProcessOnePole(left, &plaits->onepole_state_left, filter_cutoff);
+                        right = ProcessOnePole(right, &plaits->onepole_state_right, filter_cutoff);
                     }
                 }
                 
