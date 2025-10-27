@@ -55,10 +55,16 @@ make install  # Shows the deploy command
 ### MI Marbles
 
 - **MIDI random generator** with host tempo sync
-- **T outputs**: 3 channels of random voltages/gates
-  - Rate: -48 to +48 semitones (with tempo sync)
-  - Bias, Jitter, Steps, Length controls
-  - Mode: Async/Locked/Locked with Ratcheting
-  - Range: Slow (÷16), Medium (1x), Fast (×16)
-- **X/Y outputs**: 3 channels each of smooth random voltages
+- **T outputs**: 3 channels of random gates (T1, T2, T3 as MIDI notes 60, 61, 62)
+  - **T1**: Random slave gate derived from T2 (slave channel 0)
+  - **T2**: Master clock with jitter control (the main rhythmic clock)
+  - **T3**: Random slave gate derived from T2 (slave channel 1)
+  - Rate: -48 to +48 semitones (with tempo sync to host BPM)
+  - Bias: Controls probability distribution between T1 and T3
+  - Jitter: Clock timing randomness (stable to chaotic)
+  - Mode: 6 generation modes (Complementary Bernoulli, Clusters, Drums, Independent Bernoulli, Divider, Three States)
+  - Range: Slow (0.25x), Medium (1x), Fast (4x)
+- **X/Y outputs**: Random CV voltages as MIDI CC (X1, X2, X3 as CC 1-3, Y as CC 4)
   - Spread, Bias, Steps controls
+  - Voltage ranges: ±2V, 0-5V, ±5V
+  - Control modes: Identical, Bump, Tilt
