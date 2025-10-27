@@ -650,8 +650,6 @@ run(LV2_Handle instance, uint32_t n_samples)
         float braids_output[24];
         memset(braids_output, 0, sizeof(braids_output));
         
-        // CRITICAL: Only generate Braids output if NOT using Rings internal exciter
-        // When internal exciter is enabled, Rings generates its own sound
         if (!use_internal_exciter && (has_activity || braids->has_trigger)) {
             braids->osc.Render(braids->sync_buffer, braids->render_buffer, block_size);
             braids->has_trigger = has_activity;
@@ -668,11 +666,6 @@ run(LV2_Handle instance, uint32_t n_samples)
         if (rings_enabled && braids->rings_part && braids->rings_strummer) {
             // Process each sample through Rings
             for (uint32_t i = 0; i < block_size; i++) {
-                // Add sample to input buffer
-                // When using internal exciter, input buffer should be zeros (Strummer will generate)
-                // When using external exciter, input buffer gets Braids audio
-                // BOOST: Multiply by 2.0 to give Rings a stronger excitation signal
-                // Rings expects energetic input to drive the resonators properly
                 float exciter_gain = use_internal_exciter ? 1.0f : 2.0f;
                 braids->rings_input_buffer[braids->rings_buffer_index] = braids_output[i] * exciter_gain;
                 braids->rings_buffer_index++;
@@ -696,9 +689,6 @@ run(LV2_Handle instance, uint32_t n_samples)
                     performance_state.internal_strum = use_internal_exciter;
                     performance_state.internal_note = false;
                     
-                    // Detect strum (note on/off transitions)
-                    // CRITICAL: When using external exciter, we MUST trigger strum
-                    // or Rings won't respond to the audio input!
                     bool current_strum = braids->note_on;
                     bool strum_trigger = (current_strum && !braids->rings_last_strum) || strum_event;
                     
@@ -713,11 +703,6 @@ run(LV2_Handle instance, uint32_t n_samples)
                     braids->rings_last_strum = current_strum;
                     strum_event = false;
                     
-                    // CRITICAL: Rings pitch calculation
-                    // Rings uses MIDI note numbers where the final pitch is: note + tonic
-                    // VCV Rack sets: note = CV in semitones, tonic = 12.0 + transpose
-                    // Since 'note' is already in MIDI note numbers (60 = C4), we just use it directly
-                    // rings_frequency knob acts as transpose: 0.0-1.0 maps to -24 to +24 semitones
                     float freq_transpose = 0.0f;
                     if (braids->rings_frequency) {
                         // Map 0.5 = no transpose, 0.0 = -24 semitones, 1.0 = +24 semitones
@@ -733,9 +718,6 @@ run(LV2_Handle instance, uint32_t n_samples)
                     if (performance_state.chord < 0) performance_state.chord = 0;
                     if (performance_state.chord >= kNumChords) performance_state.chord = kNumChords - 1;
                     
-                    // CRITICAL: Strummer processes the input buffer
-                    // When using external exciter (Braids audio), pass NULL to prevent adding synthetic clicks
-                    // When using internal exciter, Strummer generates the excitation signal
                     if (use_internal_exciter) {
                         braids->rings_strummer->Process(NULL, 24, &performance_state);
                     } else {
