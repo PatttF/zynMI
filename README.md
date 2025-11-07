@@ -65,7 +65,7 @@ This design enables rich, evolving timbres through cross-modulation between osci
 - **Layered synthesis**: Blend two different synthesis methods (e.g., analog sawtooth + FM)
 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-### About MI Marbles
+### About CHaos Engine
 
 - **MIDI random generator** with host tempo sync
 - **T outputs**: 3 channels of random gates (T1, T2, T3 as MIDI notes 60, 61, 62)
