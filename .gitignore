@@ -1,0 +1,22 @@
+# Build directories
+x86_64-build/
+aarch64-build/
+
+# Object files and binaries
+*.o
+*.so
+*.a
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Aether submodule (keeping separate)
+Aether/
