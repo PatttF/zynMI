@@ -950,6 +950,10 @@ typedef struct {
     float braids_current_note;
     float plaits_current_note;
     
+    // Track previous shape/engine to avoid unnecessary Strike() calls
+    int previous_braids_shape;
+    int previous_plaits_engine;
+    
     double sample_rate;
 } Mutated;
 
@@ -1029,6 +1033,10 @@ instantiate(const LV2_Descriptor* descriptor,
     mutated->lfo_pwm.Init(rate);
     mutated->lfo_sine_value = 0.0f;
     mutated->lfo_saw_value = 0.0f;
+    
+    // Initialize previous shape/engine tracking
+    mutated->previous_braids_shape = -1;
+    mutated->previous_plaits_engine = -1;
     mutated->lfo_pwm_value = 0.0f;
     mutated->lfo_sine_rate = 0.2f;
     mutated->lfo_saw_rate = 0.2f;
@@ -1479,8 +1487,13 @@ run(LV2_Handle instance, uint32_t n_samples)
         float braids_output[24] = {0};
         
         if (braids_enabled) {
+            // Only set shape if it changed (to avoid unnecessary Strike() calls)
+            if (braids_shape != mutated->previous_braids_shape) {
+                mutated->osc.set_shape((braids::MacroOscillatorShape)braids_shape);
+                mutated->previous_braids_shape = braids_shape;
+            }
+            
             // Set parameters (with modulation)
-            mutated->osc.set_shape((braids::MacroOscillatorShape)braids_shape);
             int16_t timbre = (int16_t)(mod_braids_timbre * 32767.0f);
             int16_t color = (int16_t)(mod_braids_color * 32767.0f);
             mutated->osc.set_parameters(timbre, color);
@@ -1516,8 +1529,13 @@ run(LV2_Handle instance, uint32_t n_samples)
         float plaits_output[24] = {0};
         
         if (plaits_enabled && mutated->plaits_envelope.IsActive() && mutated->plaits_voice) {
+            // Only set engine if it changed (to avoid unnecessary reinitialization)
+            if (plaits_engine != mutated->previous_plaits_engine) {
+                mutated->plaits_patch.engine = plaits_engine;
+                mutated->previous_plaits_engine = plaits_engine;
+            }
+            
             // Set parameters (with modulation)
-            mutated->plaits_patch.engine = plaits_engine;
             mutated->plaits_patch.note = plaits_note;
             mutated->plaits_patch.harmonics = mod_plaits_harmonics;
             mutated->plaits_patch.timbre = mod_plaits_timbre;
