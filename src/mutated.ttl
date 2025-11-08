@@ -492,12 +492,6 @@
 			rdfs:label "None" ;
 			rdf:value 0
 		] , [
-			rdfs:label "Braids Out" ;
-			rdf:value 1
-		] , [
-			rdfs:label "Plaits Out" ;
-			rdf:value 2
-		] , [
 			rdfs:label "Braids Env" ;
 			rdf:value 3
 		] , [
@@ -522,6 +516,12 @@
 			rdfs:label "Plaits Morph" ;
 			rdf:value 10
 		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 2
+		] , [
 			rdfs:label "Sine" ;
 			rdf:value 11
 		] , [
@@ -540,12 +540,15 @@
 		lv2:displayPriority 11 ;
 		lv2:default 0 ;
 		lv2:minimum 0 ;
-		lv2:maximum 14 ;
+		lv2:maximum 18 ;
 		lv2:portProperty lv2:integer ,
 			lv2:enumeration ;
 		lv2:scalePoint [
 			rdfs:label "None" ;
 			rdf:value 0
+		] , [
+			rdfs:label "Braids Pitch" ;
+			rdf:value 9
 		] , [
 			rdfs:label "Braids Timbre" ;
 			rdf:value 1
@@ -555,6 +558,15 @@
 		] , [
 			rdfs:label "Braids FM" ;
 			rdf:value 3
+		] , [
+			rdfs:label "Braids Level" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 13
+		] , [
+			rdfs:label "Plaits Pitch" ;
+			rdf:value 10
 		] , [
 			rdfs:label "Plaits Harmonics" ;
 			rdf:value 4
@@ -571,23 +583,23 @@
 			rdfs:label "Plaits LPG Colour" ;
 			rdf:value 8
 		] , [
-			rdfs:label "Braids Pitch" ;
-			rdf:value 9
-		] , [
-			rdfs:label "Plaits Pitch" ;
-			rdf:value 10
-		] , [
-			rdfs:label "Braids Level" ;
-			rdf:value 11
-		] , [
 			rdfs:label "Plaits Level" ;
 			rdf:value 12
 		] , [
-			rdfs:label "Braids Out" ;
-			rdf:value 13
-		] , [
 			rdfs:label "Plaits Out" ;
 			rdf:value 14
+		] , [
+			rdfs:label "Reverb Time" ;
+			rdf:value 15
+		] , [
+			rdfs:label "Reverb Mix" ;
+			rdf:value 16
+		] , [
+			rdfs:label "Reverb Bass" ;
+			rdf:value 17
+		] , [
+			rdfs:label "Reverb Treble" ;
+			rdf:value 18
 		]
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
@@ -625,12 +637,6 @@
 			rdfs:label "None" ;
 			rdf:value 0
 		] , [
-			rdfs:label "Braids Out" ;
-			rdf:value 1
-		] , [
-			rdfs:label "Plaits Out" ;
-			rdf:value 2
-		] , [
 			rdfs:label "Braids Env" ;
 			rdf:value 3
 		] , [
@@ -655,6 +661,12 @@
 			rdfs:label "Plaits Morph" ;
 			rdf:value 10
 		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 2
+		] , [
 			rdfs:label "Sine" ;
 			rdf:value 11
 		] , [
@@ -673,12 +685,15 @@
 		lv2:displayPriority 7 ;
 		lv2:default 0 ;
 		lv2:minimum 0 ;
-		lv2:maximum 14 ;
+		lv2:maximum 18 ;
 		lv2:portProperty lv2:integer ,
 			lv2:enumeration ;
 		lv2:scalePoint [
 			rdfs:label "None" ;
 			rdf:value 0
+		] , [
+			rdfs:label "Braids Pitch" ;
+			rdf:value 9
 		] , [
 			rdfs:label "Braids Timbre" ;
 			rdf:value 1
@@ -688,6 +703,15 @@
 		] , [
 			rdfs:label "Braids FM" ;
 			rdf:value 3
+		] , [
+			rdfs:label "Braids Level" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 13
+		] , [
+			rdfs:label "Plaits Pitch" ;
+			rdf:value 10
 		] , [
 			rdfs:label "Plaits Harmonics" ;
 			rdf:value 4
@@ -704,23 +728,23 @@
 			rdfs:label "Plaits LPG Colour" ;
 			rdf:value 8
 		] , [
-			rdfs:label "Braids Pitch" ;
-			rdf:value 9
-		] , [
-			rdfs:label "Plaits Pitch" ;
-			rdf:value 10
-		] , [
-			rdfs:label "Braids Level" ;
-			rdf:value 11
-		] , [
 			rdfs:label "Plaits Level" ;
 			rdf:value 12
 		] , [
-			rdfs:label "Braids Out" ;
-			rdf:value 13
-		] , [
 			rdfs:label "Plaits Out" ;
 			rdf:value 14
+		] , [
+			rdfs:label "Reverb Time" ;
+			rdf:value 15
+		] , [
+			rdfs:label "Reverb Mix" ;
+			rdf:value 16
+		] , [
+			rdfs:label "Reverb Bass" ;
+			rdf:value 17
+		] , [
+			rdfs:label "Reverb Treble" ;
+			rdf:value 18
 		]
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
@@ -758,12 +782,6 @@
 			rdfs:label "None" ;
 			rdf:value 0
 		] , [
-			rdfs:label "Braids Out" ;
-			rdf:value 1
-		] , [
-			rdfs:label "Plaits Out" ;
-			rdf:value 2
-		] , [
 			rdfs:label "Braids Env" ;
 			rdf:value 3
 		] , [
@@ -788,6 +806,12 @@
 			rdfs:label "Plaits Morph" ;
 			rdf:value 10
 		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 2
+		] , [
 			rdfs:label "Sine" ;
 			rdf:value 11
 		] , [
@@ -806,12 +830,15 @@
 		lv2:displayPriority 3 ;
 		lv2:default 0 ;
 		lv2:minimum 0 ;
-		lv2:maximum 14 ;
+		lv2:maximum 18 ;
 		lv2:portProperty lv2:integer ,
 			lv2:enumeration ;
 		lv2:scalePoint [
 			rdfs:label "None" ;
 			rdf:value 0
+		] , [
+			rdfs:label "Braids Pitch" ;
+			rdf:value 9
 		] , [
 			rdfs:label "Braids Timbre" ;
 			rdf:value 1
@@ -821,6 +848,15 @@
 		] , [
 			rdfs:label "Braids FM" ;
 			rdf:value 3
+		] , [
+			rdfs:label "Braids Level" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 13
+		] , [
+			rdfs:label "Plaits Pitch" ;
+			rdf:value 10
 		] , [
 			rdfs:label "Plaits Harmonics" ;
 			rdf:value 4
@@ -837,23 +873,23 @@
 			rdfs:label "Plaits LPG Colour" ;
 			rdf:value 8
 		] , [
-			rdfs:label "Braids Pitch" ;
-			rdf:value 9
-		] , [
-			rdfs:label "Plaits Pitch" ;
-			rdf:value 10
-		] , [
-			rdfs:label "Braids Level" ;
-			rdf:value 11
-		] , [
 			rdfs:label "Plaits Level" ;
 			rdf:value 12
 		] , [
-			rdfs:label "Braids Out" ;
-			rdf:value 13
-		] , [
 			rdfs:label "Plaits Out" ;
 			rdf:value 14
+		] , [
+			rdfs:label "Reverb Time" ;
+			rdf:value 15
+		] , [
+			rdfs:label "Reverb Mix" ;
+			rdf:value 16
+		] , [
+			rdfs:label "Reverb Bass" ;
+			rdf:value 17
+		] , [
+			rdfs:label "Reverb Treble" ;
+			rdf:value 18
 		]
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
@@ -1097,17 +1133,96 @@
 		lv2:minimum -48.0 ;
 		lv2:maximum 48.0 ;
 		units:unit units:semitone12TET
-        ] , [
-                a lv2:OutputPort , lv2:AudioPort ;
-                lv2:index 51 ;
-                lv2:symbol "out_l" ;
-                lv2:name "Out L"
-        ] , [
-                a lv2:OutputPort , lv2:AudioPort ;
-                lv2:index 52 ;
-                lv2:symbol "out_r" ;
-                lv2:name "Out R"
-        ] .
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 51 ;
+		lv2:symbol "reverb_routing" ;
+		lv2:name "Reverb Routing" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 10 ;
+		lv2:portProperty lv2:enumeration ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 4 ;
+		lv2:scalePoint [
+			rdfs:label "Off (Bypass)" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Braids Only" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Plaits Only" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Both Oscillators" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Post-Filter (Mixed)" ;
+			rdf:value 4
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 52 ;
+		lv2:symbol "reverb_time" ;
+		lv2:name "Reverb Time" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 9 ;
+		lv2:default 2.2 ;
+		lv2:minimum 0.5 ;
+		lv2:maximum 8.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 53 ;
+		lv2:symbol "reverb_delay" ;
+		lv2:name "Reverb Pre-Delay" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 8 ;
+		lv2:default 30.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 200.0 ;
+		units:unit units:ms
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 54 ;
+		lv2:symbol "reverb_bass" ;
+		lv2:name "Reverb Bass" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 7 ;
+		lv2:default 0.0 ;
+		lv2:minimum -1.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 55 ;
+		lv2:symbol "reverb_treble" ;
+		lv2:name "Reverb Treble" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 6 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 56 ;
+		lv2:symbol "reverb_mix" ;
+		lv2:name "Reverb Mix" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 5 ;
+		lv2:default 0.3 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:OutputPort , lv2:AudioPort ;
+		lv2:index 57 ;
+		lv2:symbol "out_l" ;
+		lv2:name "Out L"
+	] , [
+		a lv2:OutputPort , lv2:AudioPort ;
+		lv2:index 58 ;
+		lv2:symbol "out_r" ;
+		lv2:name "Out R"
+	] .
 
 mutated:braids
 	a pg:Group ,
@@ -1144,3 +1259,9 @@ mutated:filter2
 	lv2:symbol "filter2" ;
 	lv2:displayPriority 3 .
 
+mutated:reverb
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Reverb" ;
+	lv2:symbol "reverb" ;
+	lv2:displayPriority 2 .
