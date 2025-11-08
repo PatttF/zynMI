@@ -1,28 +1,21 @@
 /*
  * Mutated Instruments LV2 Plugin
- * Dual Oscillator (Braids + Plaits) with Modulation Matrix and Filters
+ * Dual Oscillator (Braids + Plaits) with Modulation Matrix, Filters, and Reverb
  * 
- * MIT License
+ * Copyright (C) 2025 zynMI Project
  * 
- * Copyright (c) 2025 zynMI Project
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * 
  * ============================================================================
  * 
@@ -38,8 +31,14 @@
  * We gratefully acknowledge Émilie Gillet and Mutable Instruments for
  * their incredible contributions to open-source synthesizer design.
  * 
+ * - Nepenthe Reverb Algorithm (NepentheReverb class):
+ *   Original implementation by Dario Sanfilippo
+ *   https://github.com/dariosanfilippo/nepenthe
+ *   Licensed under GPL v3
+ *   Adapted for LV2 by zynMI Project
+ * 
  * The modulation matrix, filter implementations, and LFO system are
- * original work by the zynMI Project, also released under the MIT License.
+ * original work by the zynMI Project.
  * 
  * Filter implementations include classic designs:
  * - Moog Ladder Filter
@@ -62,6 +61,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <vector>
 
 // Simple ADSR Envelope
 class SimpleADSR {
@@ -624,14 +624,293 @@ private:
     float hp1_, hp2_;
 };
 
+// ============================================================================
+// Nepenthe Reverb - Velvet noise based reverb algorithm
+// 
+// Original implementation by Dario Sanfilippo
+// https://github.com/dariosanfilippo/nepenthe
+// Licensed under GPL v3
+//
+// This is a standalone C++11 adaptation for LV2, based on the original
+// JUCE plugin. The core algorithm uses velvet noise (sparse random impulses)
+// to create realistic reverb with low computational cost.
+//
+// Reference files are kept in src/nepenthe_reference/ for algorithm details.
+// ============================================================================
+class NepentheReverb {
+public:
+    struct Echo {
+        int position;
+        bool sign;
+        float amplitude;
+    };
+    
+    NepentheReverb() : sample_rate_(48000.0f), data_(nullptr), data_size_(0),
+                       read_pos_(0), feedback_pos_(0), delay_buffer_(nullptr),
+                       delay_size_(0), delay_pos_(0) {}
+    
+    ~NepentheReverb() {
+        if (data_) {
+            delete[] data_;
+        }
+        if (delay_buffer_) {
+            delete[] delay_buffer_;
+        }
+    }
+    
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        
+        // Constants
+        echoes_per_channel_ = 1000;
+        loop_seconds_ = 1.0f;
+        gain_per_echo_ = 1.0f / sqrtf(echoes_per_channel_);  // Energy-preserving gain
+        max_delay_ms_ = 200;
+        
+        // Calculate sizes
+        spacing_ = static_cast<int>(roundf(sample_rate_ * loop_seconds_ / echoes_per_channel_));
+        loop_length_ = spacing_ * echoes_per_channel_;
+        loop_capacity_ = loop_length_ * 2;
+        
+        // Allocate circular buffer for reverb
+        if (data_) delete[] data_;
+        data_ = new float[loop_capacity_];
+        data_size_ = loop_capacity_;
+        
+        // Allocate delay buffer (max 200ms, stereo)
+        delay_capacity_ = static_cast<int>(0.001f * sample_rate_ * max_delay_ms_) * 2 + 2;
+        if (delay_buffer_) delete[] delay_buffer_;
+        delay_buffer_ = new float[delay_capacity_];
+        delay_size_ = delay_capacity_;
+        delay_pos_ = 0;
+        
+        // Clear buffers
+        for (int i = 0; i < data_size_; i++) {
+            data_[i] = 0.0f;
+        }
+        for (int i = 0; i < delay_size_; i++) {
+            delay_buffer_[i] = 0.0f;
+        }
+        
+        // Initialize positions
+        read_pos_ = 0;
+        feedback_pos_ = loop_length_;
+        
+        // Generate velvet noise echo patterns for stereo (different seeds for L/R stereo width)
+        GenerateEchoes(echoes_left_, 12345);
+        GenerateEchoes(echoes_right_, 54321);
+        
+        // Default parameters
+        time_ = 2.2f;  // RT60 in seconds
+        feedback_ = GetAmplitude(loop_length_);
+        mix_ = 0.5f;
+        delay_length_ = 0;
+        bass_gain_ = 0.0f;
+        treble_freq_ = 2000.0f;
+        
+        // Initialize filters
+        bass_lp_l_ = 0.0f;
+        bass_lp_r_ = 0.0f;
+        treble_lp_l_ = 0.0f;
+        treble_lp_r_ = 0.0f;
+        
+        // Calculate filter coefficients
+        UpdateFilters();
+    }
+    
+    void SetParameters(float time, float delay_ms, float bass, float treble, float mix) {
+        time_ = time;
+        mix_ = mix;
+        feedback_ = GetAmplitude(loop_length_);
+        
+        // Delay in samples (stereo pairs)
+        delay_length_ = static_cast<int>(0.001f * sample_rate_ * delay_ms) * 2;
+        if (delay_length_ >= delay_capacity_) {
+            delay_length_ = delay_capacity_ - 2;
+        }
+        
+        // Bass: -1 to +1 mapped to gain adjustment
+        bass_gain_ = bass * 0.02f;  // ±2% gain per unit
+        
+        // Treble: 0 to 1 mapped to 1500Hz - 3500Hz
+        treble_freq_ = 1500.0f + treble * 2000.0f;
+        
+        UpdateFilters();
+        
+        // Update echo amplitudes
+        for (auto& echo : echoes_left_) {
+            echo.amplitude = GetAmplitude(echo.position);
+        }
+        for (auto& echo : echoes_right_) {
+            echo.amplitude = GetAmplitude(echo.position);
+        }
+    }
+    
+    void UpdateFilters() {
+        // Bass filter at 300Hz
+        float bass_freq = 300.0f;
+        bass_k_ = 1.0f - expf(-2.0f * M_PI * bass_freq / sample_rate_);
+        
+        // Treble filter (variable)
+        treble_k_ = 1.0f - expf(-2.0f * M_PI * treble_freq_ / sample_rate_);
+    }
+    
+    void Process(float input_l, float input_r, float& output_l, float& output_r) {
+        // Apply pre-delay if enabled
+        float delayed_l = input_l;
+        float delayed_r = input_r;
+        
+        if (delay_length_ > 0) {
+            // Write to delay buffer
+            delay_buffer_[delay_pos_] = input_l;
+            delay_buffer_[delay_pos_ + 1] = input_r;
+            
+            // Read from delay buffer
+            int read_delay_pos = delay_pos_ - delay_length_;
+            if (read_delay_pos < 0) read_delay_pos += delay_size_;
+            
+            delayed_l = delay_buffer_[read_delay_pos];
+            delayed_r = delay_buffer_[read_delay_pos + 1];
+            
+            // Advance delay position
+            delay_pos_ += 2;
+            if (delay_pos_ >= delay_size_) delay_pos_ = 0;
+        }
+        
+        // Write echoes for left channel (offset 0)
+        ProcessChannel(delayed_l, echoes_left_, 0);
+        
+        // Write echoes for right channel (offset 1)
+        ProcessChannel(delayed_r, echoes_right_, 1);
+        
+        // Read output and apply feedback for BOTH channels before advancing
+        // Left channel
+        int left_pos = read_pos_;
+        int left_fb_pos = feedback_pos_;
+        output_l = data_[left_pos];
+        data_[left_pos] = 0.0f;
+        data_[left_fb_pos] += output_l * feedback_;
+        
+        // Advance to next position for right channel
+        if (++read_pos_ == data_size_) read_pos_ = 0;
+        if (++feedback_pos_ == data_size_) feedback_pos_ = 0;
+        
+        // Right channel
+        int right_pos = read_pos_;
+        int right_fb_pos = feedback_pos_;
+        output_r = data_[right_pos];
+        data_[right_pos] = 0.0f;
+        data_[right_fb_pos] += output_r * feedback_;
+        
+        // Advance for next sample
+        if (++read_pos_ == data_size_) read_pos_ = 0;
+        if (++feedback_pos_ == data_size_) feedback_pos_ = 0;
+        
+        // Apply EQ (bass boost/cut and treble filter)
+        // Bass: simple gain adjustment with low-shelf
+        bass_lp_l_ += bass_k_ * (output_l - bass_lp_l_);
+        bass_lp_r_ += bass_k_ * (output_r - bass_lp_r_);
+        output_l += bass_lp_l_ * bass_gain_;
+        output_r += bass_lp_r_ * bass_gain_;
+        
+        // Treble: lowpass filter
+        treble_lp_l_ += treble_k_ * (output_l - treble_lp_l_);
+        treble_lp_r_ += treble_k_ * (output_r - treble_lp_r_);
+        output_l = treble_lp_l_;
+        output_r = treble_lp_r_;
+        
+        // Apply mix
+        output_l = input_l * (1.0f - mix_) + output_l * mix_;
+        output_r = input_r * (1.0f - mix_) + output_r * mix_;
+    }
+    
+private:
+    void GenerateEchoes(std::vector<Echo>& echoes, unsigned int seed) {
+        echoes.clear();
+        echoes.reserve(echoes_per_channel_);
+        
+        for (int i = 0; i < echoes_per_channel_; i++) {
+            Echo echo;
+            echo.position = i * spacing_ + (Rand(seed) % spacing_);
+            echo.sign = (Rand(seed) & 1) == 0;
+            // Include sign in amplitude like original Nepenthe
+            float amp = GetAmplitude(echo.position);
+            echo.amplitude = echo.sign ? amp : -amp;
+            echoes.push_back(echo);
+        }
+    }
+    
+    unsigned int Rand(unsigned int& seed) {
+        seed = seed * 1664525u + 1013904223u;  // Linear congruential generator
+        return seed;
+    }
+    
+    float GetAmplitude(int position) const {
+        float rt60_position = sample_rate_ * time_;
+        return powf(0.001f, position / rt60_position);
+    }
+    
+    void ProcessChannel(float input, const std::vector<Echo>& echoes, int channel_offset) {
+        for (const Echo& echo : echoes) {
+            float gain = gain_per_echo_ * echo.amplitude;  // amplitude already includes sign
+            
+            int pos = read_pos_ + echo.position * 2 + channel_offset;  // *2 for stereo interleave, +offset for L/R
+            if (pos >= data_size_) pos -= data_size_;
+            
+            data_[pos] += gain * input;
+        }
+    }
+    
+    float sample_rate_;
+    float* data_;
+    int data_size_;
+    int read_pos_;
+    int feedback_pos_;
+    
+    // Delay line
+    float* delay_buffer_;
+    int delay_size_;
+    int delay_pos_;
+    int delay_capacity_;
+    int delay_length_;
+    int max_delay_ms_;
+    
+    int echoes_per_channel_;
+    float loop_seconds_;
+    float gain_per_echo_;
+    int spacing_;
+    int loop_length_;
+    int loop_capacity_;
+    
+    std::vector<Echo> echoes_left_;
+    std::vector<Echo> echoes_right_;
+    
+    float time_;
+    float feedback_;
+    float mix_;
+    
+    // EQ parameters
+    float bass_gain_;
+    float treble_freq_;
+    float bass_k_;
+    float treble_k_;
+    
+    // EQ state
+    float bass_lp_l_;
+    float bass_lp_r_;
+    float treble_lp_l_;
+    float treble_lp_r_;
+};
+
 // LFO with multiple waveforms
 class LFO {
 public:
-    LFO() : sample_rate_(48000.0f), phase_(0.0f) {}
+    LFO() : sample_rate_(48000.0f), phase_(0.0f), sh_value_(0.0f) {}
 
     void Init(float sample_rate) {
         sample_rate_ = sample_rate;
         phase_ = 0.0f;
+        sh_value_ = 0.0f;
     }
 
     void Reset() {
@@ -679,12 +958,11 @@ public:
             }
                 
             case 5: { // Sample & Hold (random)
-                static float sh_value = 0.0f;
                 if (phase_ < phase_increment) {
                     // New random value at phase wrap
-                    sh_value = -1.0f + 2.0f * (rand() / (float)RAND_MAX);
+                    sh_value_ = -1.0f + 2.0f * (rand() / (float)RAND_MAX);
                 }
-                output = sh_value;
+                output = sh_value_;
                 break;
             }
         }
@@ -699,6 +977,7 @@ public:
 private:
     float sample_rate_;
     float phase_;
+    float sh_value_;  // Sample & hold value (per-instance)
 };
 
 #define TEST
@@ -777,6 +1056,13 @@ typedef enum {
     // Detune (Octave shift)
     BRAIDS_DETUNE,
     PLAITS_DETUNE,
+    // Reverb
+    REVERB_ROUTING,
+    REVERB_TIME,
+    REVERB_DELAY,
+    REVERB_BASS,
+    REVERB_TREBLE,
+    REVERB_MIX,
     // Outputs
     MUTATED_OUT_L,
     MUTATED_OUT_R
@@ -816,7 +1102,11 @@ enum ModTarget {
     MOD_TGT_BRAIDS_LEVEL,
     MOD_TGT_PLAITS_LEVEL,
     MOD_TGT_BRAIDS_OUT,
-    MOD_TGT_PLAITS_OUT
+    MOD_TGT_PLAITS_OUT,
+    MOD_TGT_REVERB_TIME,
+    MOD_TGT_REVERB_MIX,
+    MOD_TGT_REVERB_BASS,
+    MOD_TGT_REVERB_TREBLE
 };
 
 // Filter types
@@ -836,6 +1126,15 @@ enum FilterRouting {
     ROUTE_BRAIDS = 0,
     ROUTE_PLAITS,
     ROUTE_BOTH
+};
+
+// Reverb routing
+enum ReverbRouting {
+    REVERB_OFF = 0,
+    REVERB_BRAIDS,
+    REVERB_PLAITS,
+    REVERB_BOTH_OSC,
+    REVERB_POST_FILTER
 };
 
 typedef struct {
@@ -891,6 +1190,12 @@ typedef struct {
     const float* plaits_glide;
     const float* braids_detune;
     const float* plaits_detune;
+    const float* reverb_routing;
+    const float* reverb_time;
+    const float* reverb_delay;
+    const float* reverb_bass;
+    const float* reverb_treble;
+    const float* reverb_mix;
     float* out_l;
     float* out_r;
     
@@ -954,6 +1259,9 @@ typedef struct {
     // Track previous shape/engine to avoid unnecessary Strike() calls
     int previous_braids_shape;
     int previous_plaits_engine;
+    
+    // Reverb
+    NepentheReverb reverb;
     
     double sample_rate;
 } Mutated;
@@ -1046,6 +1354,9 @@ instantiate(const LV2_Descriptor* descriptor,
     // Initialize glide
     mutated->braids_current_note = 60.0f;
     mutated->plaits_current_note = 60.0f;
+    
+    // Initialize reverb
+    mutated->reverb.Init(rate);
     
     return (LV2_Handle)mutated;
 }
@@ -1208,6 +1519,24 @@ connect_port(LV2_Handle instance, uint32_t port, void* data)
             break;
         case PLAITS_DETUNE:
             mutated->plaits_detune = (const float*)data;
+            break;
+        case REVERB_ROUTING:
+            mutated->reverb_routing = (const float*)data;
+            break;
+        case REVERB_TIME:
+            mutated->reverb_time = (const float*)data;
+            break;
+        case REVERB_DELAY:
+            mutated->reverb_delay = (const float*)data;
+            break;
+        case REVERB_BASS:
+            mutated->reverb_bass = (const float*)data;
+            break;
+        case REVERB_TREBLE:
+            mutated->reverb_treble = (const float*)data;
+            break;
+        case REVERB_MIX:
+            mutated->reverb_mix = (const float*)data;
             break;
         case MUTATED_OUT_L:
             mutated->out_l = (float*)data;
@@ -1377,6 +1706,10 @@ run(LV2_Handle instance, uint32_t n_samples)
     float base_plaits_lpg_decay = *mutated->plaits_lpg_decay;
     float base_plaits_lpg_colour = *mutated->plaits_lpg_colour;
     float base_plaits_level = *mutated->plaits_level;
+    float base_reverb_time = *mutated->reverb_time;
+    float base_reverb_mix = *mutated->reverb_mix;
+    float base_reverb_bass = *mutated->reverb_bass;
+    float base_reverb_treble = *mutated->reverb_treble;
     
     // Process in 24-sample blocks
     uint32_t offset = 0;
@@ -1401,6 +1734,10 @@ run(LV2_Handle instance, uint32_t n_samples)
         float mod_plaits_pitch = 0.0f;
         float mod_plaits_level = base_plaits_level;
         float mod_plaits_out = 1.0f;  // Output scaling
+        float mod_reverb_time = base_reverb_time;
+        float mod_reverb_mix = base_reverb_mix;
+        float mod_reverb_bass = base_reverb_bass;
+        float mod_reverb_treble = base_reverb_treble;
         
         // Process modulation slots
         for (int mod_slot = 0; mod_slot < 3; mod_slot++) {
@@ -1436,6 +1773,10 @@ run(LV2_Handle instance, uint32_t n_samples)
                     case MOD_TGT_PLAITS_PITCH: mod_plaits_pitch += detune * mod_value * 12.0f; break;
                     case MOD_TGT_PLAITS_LEVEL: mod_plaits_level += mod_value; break;
                     case MOD_TGT_PLAITS_OUT: mod_plaits_out += mod_value; break;
+                    case MOD_TGT_REVERB_TIME: mod_reverb_time += mod_value * 7.5f; break;  // Scale to 0.5-8.0s range
+                    case MOD_TGT_REVERB_MIX: mod_reverb_mix += mod_value; break;
+                    case MOD_TGT_REVERB_BASS: mod_reverb_bass += mod_value * 2.0f; break;  // Scale to -1.0 to +1.0 range
+                    case MOD_TGT_REVERB_TREBLE: mod_reverb_treble += mod_value; break;
                 }
             }
         }
@@ -1452,6 +1793,10 @@ run(LV2_Handle instance, uint32_t n_samples)
         mod_plaits_lpg_colour = Clip(mod_plaits_lpg_colour, 0.0f, 1.0f);
         mod_plaits_level = Clip(mod_plaits_level, 0.0f, 1.0f);
         mod_plaits_out = Clip(mod_plaits_out, 0.0f, 2.0f);  // Allow up to 2x boost
+        mod_reverb_time = Clip(mod_reverb_time, 0.5f, 8.0f);
+        mod_reverb_mix = Clip(mod_reverb_mix, 0.0f, 1.0f);
+        mod_reverb_bass = Clip(mod_reverb_bass, -1.0f, 1.0f);
+        mod_reverb_treble = Clip(mod_reverb_treble, 0.0f, 1.0f);
         
         // Apply glide (portamento) to notes
         float braids_target_note = (float)mutated->current_note;
@@ -1697,6 +2042,17 @@ run(LV2_Handle instance, uint32_t n_samples)
         float plaits_pan_l = cosf(plaits_pan * M_PI * 0.5f);
         float plaits_pan_r = sinf(plaits_pan * M_PI * 0.5f);
         
+        // Get reverb parameters (use modulated values, except routing and delay which aren't modulated)
+        int reverb_routing = (int)(*mutated->reverb_routing);
+        float reverb_delay = *mutated->reverb_delay;
+        
+        // Update reverb parameters with modulated values (not every sample for efficiency)
+        static int param_update_counter = 0;
+        if (param_update_counter++ > 480) {  // Update every ~10ms at 48kHz
+            mutated->reverb.SetParameters(mod_reverb_time, reverb_delay, mod_reverb_bass, mod_reverb_treble, mod_reverb_mix);
+            param_update_counter = 0;
+        }
+        
         // Mix to output (stereo) with output modulation and panning
         for (uint32_t i = 0; i < block_size; i++) {
             float braids_final = braids_output[i] * mod_braids_out;
@@ -1708,10 +2064,42 @@ run(LV2_Handle instance, uint32_t n_samples)
             float plaits_l = plaits_final * plaits_pan_l;
             float plaits_r = plaits_final * plaits_pan_r;
             
+            // Apply reverb based on routing (use temp variables to avoid aliasing)
+            if (reverb_routing == REVERB_BRAIDS) {
+                float temp_l, temp_r;
+                mutated->reverb.Process(braids_l, braids_r, temp_l, temp_r);
+                braids_l = temp_l;
+                braids_r = temp_r;
+            } else if (reverb_routing == REVERB_PLAITS) {
+                float temp_l, temp_r;
+                mutated->reverb.Process(plaits_l, plaits_r, temp_l, temp_r);
+                plaits_l = temp_l;
+                plaits_r = temp_r;
+            } else if (reverb_routing == REVERB_BOTH_OSC) {
+                float temp_l, temp_r;
+                mutated->reverb.Process(braids_l, braids_r, temp_l, temp_r);
+                braids_l = temp_l;
+                braids_r = temp_r;
+                mutated->reverb.Process(plaits_l, plaits_r, temp_l, temp_r);
+                plaits_l = temp_l;
+                plaits_r = temp_r;
+            }
+            
             // Mix and scale
             float mixed_l = (braids_l + plaits_l) * 0.7f;
             float mixed_r = (braids_r + plaits_r) * 0.7f;
             
+<<<<<<< HEAD
+=======
+            // Apply reverb to mixed signal (post-filter routing)
+            if (reverb_routing == REVERB_POST_FILTER) {
+                float temp_l, temp_r;
+                mutated->reverb.Process(mixed_l, mixed_r, temp_l, temp_r);
+                mixed_l = temp_l;
+                mixed_r = temp_r;
+            }
+            
+>>>>>>> 0e766a4 (Add Nepenthe reverb with modulation targets and GPL license update)
             // Soft clipping to prevent harsh clipping artifacts
             // Use tanh for smooth saturation
             mixed_l = tanhf(mixed_l * 2.0f) * 0.5f;
