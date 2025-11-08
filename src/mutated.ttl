@@ -253,9 +253,10 @@
 		lv2:name "Braids Attack" ;
 		pg:group mutated:braids ;
 		lv2:displayPriority 4 ;
-		lv2:default 0.01 ;
-		lv2:minimum 0.0 ;
-		lv2:maximum 2.0
+		lv2:default 0.1 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 5.0 ;
+		units:unit units:s
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
 		lv2:index 9 ;
@@ -263,9 +264,10 @@
 		lv2:name "Braids Decay" ;
 		pg:group mutated:braids ;
 		lv2:displayPriority 3 ;
-		lv2:default 0.1 ;
-		lv2:minimum 0.0 ;
-		lv2:maximum 2.0
+		lv2:default 0.3 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 5.0 ;
+		units:unit units:s
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
 		lv2:index 10 ;
@@ -283,9 +285,10 @@
 		lv2:name "Braids Release" ;
 		pg:group mutated:braids ;
 		lv2:displayPriority 1 ;
-		lv2:default 0.3 ;
-		lv2:minimum 0.0 ;
-		lv2:maximum 2.0
+		lv2:default 0.5 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 10.0 ;
+		units:unit units:s
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
 		lv2:index 12 ;
@@ -437,9 +440,10 @@
 		lv2:name "Plaits Attack" ;
 		pg:group mutated:plaits ;
 		lv2:displayPriority 3 ;
-		lv2:default 0.0 ;
-		lv2:minimum 0.0 ;
-		lv2:maximum 1.0
+		lv2:default 0.1 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 5.0 ;
+		units:unit units:s
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
 		lv2:index 22 ;
@@ -447,9 +451,10 @@
 		lv2:name "Plaits Decay" ;
 		pg:group mutated:plaits ;
 		lv2:displayPriority 2 ;
-		lv2:default 0.5 ;
-		lv2:minimum 0.0 ;
-		lv2:maximum 1.0
+		lv2:default 0.3 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 5.0 ;
+		units:unit units:s
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
 		lv2:index 23 ;
@@ -468,8 +473,9 @@
 		pg:group mutated:plaits ;
 		lv2:displayPriority 0 ;
 		lv2:default 0.5 ;
-		lv2:minimum 0.0 ;
-		lv2:maximum 1.0
+		lv2:minimum 0.001 ;
+		lv2:maximum 10.0 ;
+		units:unit units:s
 	] , [
 		a lv2:InputPort , lv2:ControlPort ;
 		lv2:index 25 ;
