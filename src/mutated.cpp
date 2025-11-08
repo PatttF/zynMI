@@ -86,7 +86,8 @@ public:
     void SetParameters(float attack, float decay, float sustain, float release) {
         attack_time_ = attack;
         decay_time_ = decay;
-        sustain_level_ = sustain;
+        // Clamp sustain to 0-1 range to prevent negative decay_delta
+        sustain_level_ = (sustain < 0.0f) ? 0.0f : (sustain > 1.0f) ? 1.0f : sustain;
         release_time_ = release;
     }
 
@@ -1488,18 +1489,18 @@ run(LV2_Handle instance, uint32_t n_samples)
         
         if (braids_enabled) {
             // Only set shape if it changed (to avoid unnecessary Strike() calls)
+            // Do this outside envelope check so shape is always set correctly
             if (braids_shape != mutated->previous_braids_shape) {
                 mutated->osc.set_shape((braids::MacroOscillatorShape)braids_shape);
                 mutated->previous_braids_shape = braids_shape;
             }
             
-            // Set parameters (with modulation)
-            int16_t timbre = (int16_t)(mod_braids_timbre * 32767.0f);
-            int16_t color = (int16_t)(mod_braids_color * 32767.0f);
-            mutated->osc.set_parameters(timbre, color);
-            
             // Render if envelope is active (including release phase)
             if (mutated->braids_envelope.IsActive()) {
+                // Set parameters (with modulation)
+                int16_t timbre = (int16_t)(mod_braids_timbre * 32767.0f);
+                int16_t color = (int16_t)(mod_braids_color * 32767.0f);
+                mutated->osc.set_parameters(timbre, color);
                 // Set pitch
                 int32_t pitch = static_cast<int32_t>((braids_note - 12.0f) * 128.0f);
                 pitch = Clip(pitch, 0, 16383);
@@ -1528,52 +1529,56 @@ run(LV2_Handle instance, uint32_t n_samples)
         // --- PLAITS ---
         float plaits_output[24] = {0};
         
-        if (plaits_enabled && mutated->plaits_envelope.IsActive() && mutated->plaits_voice) {
+        if (plaits_enabled && mutated->plaits_voice) {
             // Only set engine if it changed (to avoid unnecessary reinitialization)
+            // Do this outside envelope check so engine is always set correctly
             if (plaits_engine != mutated->previous_plaits_engine) {
                 mutated->plaits_patch.engine = plaits_engine;
                 mutated->previous_plaits_engine = plaits_engine;
             }
             
-            // Set parameters (with modulation)
-            mutated->plaits_patch.note = plaits_note;
-            mutated->plaits_patch.harmonics = mod_plaits_harmonics;
-            mutated->plaits_patch.timbre = mod_plaits_timbre;
-            mutated->plaits_patch.morph = mod_plaits_morph;
-            mutated->plaits_patch.decay = mod_plaits_lpg_decay;
-            mutated->plaits_patch.lpg_colour = mod_plaits_lpg_colour;
-            
-            // Set modulations
-            mutated->plaits_modulations.engine = 0.0f;
-            mutated->plaits_modulations.note = 0.0f;
-            mutated->plaits_modulations.frequency = 0.0f;
-            mutated->plaits_modulations.harmonics = 0.0f;
-            mutated->plaits_modulations.timbre = 0.0f;
-            mutated->plaits_modulations.morph = 0.0f;
-            mutated->plaits_modulations.trigger = (new_trigger && offset == 0) ? 1.0f : 0.0f;
-            mutated->plaits_modulations.level = 1.0f;
-            mutated->plaits_modulations.frequency_patched = false;
-            mutated->plaits_modulations.timbre_patched = false;
-            mutated->plaits_modulations.morph_patched = false;
-            mutated->plaits_modulations.trigger_patched = true;
-            mutated->plaits_modulations.level_patched = false;
-            
-            // Render
-            plaits::Voice::Frame plaits_frames[24];
-            mutated->plaits_voice->Render(mutated->plaits_patch, mutated->plaits_modulations, 
-                                         plaits_frames, block_size);
-            
-            // Convert to float and apply envelope (use ONLY main output, not aux)
-            float vel_scale = mutated->velocity / 127.0f;
-            float sum_abs = 0.0f;
-            for (uint32_t i = 0; i < block_size; i++) {
-                float env_value = mutated->plaits_envelope.Process();
-                float raw = (plaits_frames[i].out / 32768.0f);
-                sum_abs += fabs(raw);  // Accumulate absolute values
-                plaits_output[i] = raw * vel_scale * mod_plaits_level * env_value;
+            // Render only if envelope is active
+            if (mutated->plaits_envelope.IsActive()) {
+                // Set parameters (with modulation)
+                mutated->plaits_patch.note = plaits_note;
+                mutated->plaits_patch.harmonics = mod_plaits_harmonics;
+                mutated->plaits_patch.timbre = mod_plaits_timbre;
+                mutated->plaits_patch.morph = mod_plaits_morph;
+                mutated->plaits_patch.decay = mod_plaits_lpg_decay;
+                mutated->plaits_patch.lpg_colour = mod_plaits_lpg_colour;
+                
+                // Set modulations
+                mutated->plaits_modulations.engine = 0.0f;
+                mutated->plaits_modulations.note = 0.0f;
+                mutated->plaits_modulations.frequency = 0.0f;
+                mutated->plaits_modulations.harmonics = 0.0f;
+                mutated->plaits_modulations.timbre = 0.0f;
+                mutated->plaits_modulations.morph = 0.0f;
+                mutated->plaits_modulations.trigger = (new_trigger && offset == 0) ? 1.0f : 0.0f;
+                mutated->plaits_modulations.level = 1.0f;
+                mutated->plaits_modulations.frequency_patched = false;
+                mutated->plaits_modulations.timbre_patched = false;
+                mutated->plaits_modulations.morph_patched = false;
+                mutated->plaits_modulations.trigger_patched = true;
+                mutated->plaits_modulations.level_patched = false;
+                
+                // Render
+                plaits::Voice::Frame plaits_frames[24];
+                mutated->plaits_voice->Render(mutated->plaits_patch, mutated->plaits_modulations, 
+                                             plaits_frames, block_size);
+                
+                // Convert to float and apply envelope (use ONLY main output, not aux)
+                float vel_scale = mutated->velocity / 127.0f;
+                float sum_abs = 0.0f;
+                for (uint32_t i = 0; i < block_size; i++) {
+                    float env_value = mutated->plaits_envelope.Process();
+                    float raw = (plaits_frames[i].out / 32768.0f);
+                    sum_abs += fabs(raw);  // Accumulate absolute values
+                    plaits_output[i] = raw * vel_scale * mod_plaits_level * env_value;
+                }
+                // Store average absolute value for modulation
+                mutated->plaits_raw_output = sum_abs / block_size;
             }
-            // Store average absolute value for modulation
-            mutated->plaits_raw_output = sum_abs / block_size;
         }
         
         // Apply filter
@@ -1707,8 +1712,13 @@ run(LV2_Handle instance, uint32_t n_samples)
             float mixed_l = (braids_l + plaits_l) * 0.7f;
             float mixed_r = (braids_r + plaits_r) * 0.7f;
             
-            mutated->out_l[offset + i] = mixed_l * 10.0f;  // Scale to ±5V
-            mutated->out_r[offset + i] = mixed_r * 10.0f;
+            // Soft clipping to prevent harsh clipping artifacts
+            // Use tanh for smooth saturation
+            mixed_l = tanhf(mixed_l * 2.0f) * 0.5f;
+            mixed_r = tanhf(mixed_r * 2.0f) * 0.5f;
+            
+            mutated->out_l[offset + i] = mixed_l;
+            mutated->out_r[offset + i] = mixed_r;
         }
         
         offset += block_size;
@@ -1756,4 +1766,3 @@ lv2_descriptor(uint32_t index)
 {
     return index == 0 ? &descriptor : NULL;
 }
-
