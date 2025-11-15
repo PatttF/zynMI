@@ -33,7 +33,7 @@ CXXFLAGS = -std=c++11 -O2 -fPIC -DTEST \
 LDFLAGS = -shared -lm
 
 # Plugin names
-PLUGINS = plaits braids marbles mutated
+PLUGINS = mutated mutated_sequences marbles
 
 # Default target - build both architectures
 all: x86_64 aarch64
@@ -54,7 +54,7 @@ STMLIB_SOURCES = \
 	$(EURORACK_DIR)/stmlib/dsp/atan.cc \
 	$(EURORACK_DIR)/stmlib/dsp/units.cc
 
-# Plaits sources
+# Plaits sources (used by Mutated Instruments)
 PLAITS_SOURCES = \
 	$(wildcard $(EURORACK_DIR)/plaits/dsp/*.cc) \
 	$(wildcard $(EURORACK_DIR)/plaits/dsp/engine/*.cc) \
@@ -62,7 +62,7 @@ PLAITS_SOURCES = \
 	$(wildcard $(EURORACK_DIR)/plaits/dsp/physical_modelling/*.cc) \
 	$(EURORACK_DIR)/plaits/resources.cc
 
-# Braids sources
+# Braids sources (used by Mutated Instruments)
 BRAIDS_SOURCES = \
 	$(EURORACK_DIR)/braids/macro_oscillator.cc \
 	$(EURORACK_DIR)/braids/analog_oscillator.cc \
@@ -70,29 +70,7 @@ BRAIDS_SOURCES = \
 	$(EURORACK_DIR)/braids/quantizer.cc \
 	$(EURORACK_DIR)/braids/resources.cc
 
-# Tides sources
-TIDES_SOURCES = \
-	$(EURORACK_DIR)/tides/generator.cc \
-	$(EURORACK_DIR)/tides/resources.cc
-
-
-
-# Stages sources
-STAGES_SOURCES = \
-	$(EURORACK_DIR)/stages/segment_generator.cc \
-	$(EURORACK_DIR)/stages/resources.cc \
-	$(EURORACK_DIR)/stages/ramp_extractor.cc
-
-# Rings sources
-RINGS_SOURCES = \
-	$(EURORACK_DIR)/rings/dsp/part.cc \
-	$(EURORACK_DIR)/rings/dsp/string.cc \
-	$(EURORACK_DIR)/rings/dsp/resonator.cc \
-	$(EURORACK_DIR)/rings/dsp/fm_voice.cc \
-	$(EURORACK_DIR)/rings/dsp/string_synth_part.cc \
-	$(EURORACK_DIR)/rings/resources.cc
-
-# Marbles sources
+# Marbles sources (used by Chaos Engine)
 MARBLES_SOURCES = \
 	$(EURORACK_DIR)/marbles/random/t_generator.cc \
 	$(EURORACK_DIR)/marbles/random/x_y_generator.cc \
@@ -102,50 +80,6 @@ MARBLES_SOURCES = \
 	$(EURORACK_DIR)/marbles/random/discrete_distribution_quantizer.cc \
 	$(EURORACK_DIR)/marbles/ramp/ramp_extractor.cc \
 	$(EURORACK_DIR)/marbles/resources.cc
-
-# Clouds sources
-CLOUDS_SOURCES = \
-	$(EURORACK_DIR)/clouds/dsp/granular_processor.cc \
-	$(EURORACK_DIR)/clouds/dsp/mu_law.cc \
-	$(EURORACK_DIR)/clouds/dsp/correlator.cc \
-	$(EURORACK_DIR)/clouds/dsp/pvoc/frame_transformation.cc \
-	$(EURORACK_DIR)/clouds/dsp/pvoc/phase_vocoder.cc \
-	$(EURORACK_DIR)/clouds/dsp/pvoc/stft.cc \
-	$(EURORACK_DIR)/clouds/resources.cc
-
-# Build Plaits
-plaits: $(BUILD_DIR)/mi_plaits.lv2/plaits.so $(BUILD_DIR)/mi_plaits.lv2/manifest.ttl $(BUILD_DIR)/mi_plaits.lv2/plaits.ttl
-
-$(BUILD_DIR)/mi_plaits.lv2/plaits.so: $(SRC_DIR)/plaits.cpp $(PLAITS_SOURCES) $(RINGS_SOURCES) $(TIDES_SOURCES) $(STAGES_SOURCES) $(STMLIB_SOURCES)
-	@echo "Building Plaits..."
-	@mkdir -p $(BUILD_DIR)/mi_plaits.lv2
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(PLAITS_SOURCES) $(RINGS_SOURCES) $(TIDES_SOURCES) $(STAGES_SOURCES) $(STMLIB_SOURCES)
-	@echo "Plaits built successfully!"
-
-$(BUILD_DIR)/mi_plaits.lv2/manifest.ttl: $(SRC_DIR)/plaits_manifest.ttl
-	@mkdir -p $(BUILD_DIR)/mi_plaits.lv2
-	@cp $< $@
-
-$(BUILD_DIR)/mi_plaits.lv2/plaits.ttl: $(SRC_DIR)/plaits.ttl
-	@mkdir -p $(BUILD_DIR)/mi_plaits.lv2
-	@cp $< $@
-
-# Build Braids
-braids: $(BUILD_DIR)/mi_braids.lv2/braids.so $(BUILD_DIR)/mi_braids.lv2/manifest.ttl $(BUILD_DIR)/mi_braids.lv2/braids.ttl
-
-$(BUILD_DIR)/mi_braids.lv2/braids.so: $(SRC_DIR)/braids.cpp $(BRAIDS_SOURCES) $(PLAITS_SOURCES) $(RINGS_SOURCES) $(TIDES_SOURCES) $(STAGES_SOURCES) $(STMLIB_SOURCES)
-	@echo "Building Braids..."
-	@mkdir -p $(BUILD_DIR)/mi_braids.lv2
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(BRAIDS_SOURCES) $(PLAITS_SOURCES) $(RINGS_SOURCES) $(TIDES_SOURCES) $(STAGES_SOURCES) $(STMLIB_SOURCES)
-	@echo "Braids built successfully!"
-
-$(BUILD_DIR)/mi_braids.lv2/manifest.ttl: $(SRC_DIR)/braids_manifest.ttl
-	@mkdir -p $(BUILD_DIR)/mi_braids.lv2
-	@cp $< $@
-
-$(BUILD_DIR)/mi_braids.lv2/braids.ttl: $(SRC_DIR)/braids.ttl
-	@mkdir -p $(BUILD_DIR)/mi_braids.lv2
-	@cp $< $@
 
 # Build Marbles (Chaos Engine)
 marbles: $(BUILD_DIR)/mi_chaosengine.lv2/marbles.so $(BUILD_DIR)/mi_chaosengine.lv2/manifest.ttl $(BUILD_DIR)/mi_chaosengine.lv2/marbles.ttl
@@ -179,6 +113,23 @@ $(BUILD_DIR)/mi_mutated.lv2/manifest.ttl: $(SRC_DIR)/mutated_manifest.ttl
 
 $(BUILD_DIR)/mi_mutated.lv2/mutated.ttl: $(SRC_DIR)/mutated.ttl
 	@mkdir -p $(BUILD_DIR)/mi_mutated.lv2
+	@cp $< $@
+
+# Build Mutated Sequences
+mutated_sequences: $(BUILD_DIR)/mi_mutated_sequences.lv2/mutated_sequences.so $(BUILD_DIR)/mi_mutated_sequences.lv2/manifest.ttl $(BUILD_DIR)/mi_mutated_sequences.lv2/mutated_sequences.ttl
+
+$(BUILD_DIR)/mi_mutated_sequences.lv2/mutated_sequences.so: $(SRC_DIR)/mutated_sequences.cpp
+	@echo "Building Mutated Sequences..."
+	@mkdir -p $(BUILD_DIR)/mi_mutated_sequences.lv2
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
+	@echo "Mutated Sequences built successfully!"
+
+$(BUILD_DIR)/mi_mutated_sequences.lv2/manifest.ttl: $(SRC_DIR)/mutated_sequences_manifest.ttl
+	@mkdir -p $(BUILD_DIR)/mi_mutated_sequences.lv2
+	@cp $< $@
+
+$(BUILD_DIR)/mi_mutated_sequences.lv2/mutated_sequences.ttl: $(SRC_DIR)/mutated_sequences.ttl
+	@mkdir -p $(BUILD_DIR)/mi_mutated_sequences.lv2
 	@cp $< $@
 
 # Install target
@@ -241,10 +192,9 @@ help:
 	@echo "  x86_64     - Build for x86_64 only"
 	@echo "  aarch64    - Build for aarch64 only"
 	@echo "  plugins    - Build plugins for current ARCH"
-	@echo "  plaits       - Build Plaits macro oscillator"
-	@echo "  braids       - Build Braids macro oscillator (with Rings resonator)"
-	@echo "  marbles      - Build Chaos Engine random modulation/gate generator"
-	@echo "  mutated      - Build Mutated Instruments dual oscillator synth"
+	@echo "  mutated            - Build Mutated Instruments dual oscillator synth"
+	@echo "  mutated_sequences  - Build Mutated Sequences 8-step MIDI sequencer"
+	@echo "  marbles            - Build Chaos Engine random modulation/gate generator"
 	@echo "  install      - Build and prepare for deployment"
 	@echo "  verify     - Verify bundle integrity"
 	@echo "  clean      - Remove build artifacts"
@@ -266,4 +216,4 @@ help:
 	@echo "Deploy to Zynthian (ARM64 only):"
 	@echo "  scp -r aarch64-build/*.lv2 root@zynthian.local:/zynthian/zynthian-plugins/lv2/"
 
-.PHONY: all x86_64 aarch64 plugins plaits braids marbles install verify clean help
+.PHONY: all x86_64 aarch64 plugins mutated mutated_sequences marbles install verify clean help
