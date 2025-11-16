@@ -1,0 +1,1317 @@
+@prefix doap:  <http://usefulinc.com/ns/doap#> .
+@prefix lv2:   <http://lv2plug.in/ns/lv2core#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix units: <http://lv2plug.in/ns/extensions/units#> .
+@prefix atom:  <http://lv2plug.in/ns/ext/atom#> .
+@prefix midi:  <http://lv2plug.in/ns/ext/midi#> .
+@prefix urid:  <http://lv2plug.in/ns/ext/urid#> .
+@prefix pg:    <http://lv2plug.in/ns/ext/port-groups#> .
+@prefix mutated: <https://github.com/PatttF/zynMI/plugins/mutated#> .
+
+
+<https://github.com/PatttF/zynMI/plugins/mutated>
+	a lv2:Plugin ,
+		lv2:InstrumentPlugin ;
+	doap:name "Mutated Instruments" ;
+	doap:license <http://opensource.org/licenses/gpl-3.0> ;
+	lv2:project <https://github.com/PatttF/zynMI> ;
+	lv2:optionalFeature urid:map ;
+	lv2:port [
+		a lv2:InputPort ,
+			atom:AtomPort ;
+		atom:bufferType atom:Sequence ;
+		atom:supports midi:MidiEvent ;
+		lv2:designation lv2:control ;
+		lv2:index 0 ;
+		lv2:symbol "midi_in" ;
+		lv2:name "MIDI In" ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 1 ;
+		lv2:symbol "braids_level" ;
+		lv2:name "Braids Level" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 11 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 2 ;
+		lv2:symbol "braids_shape" ;
+		lv2:name "Braids Shape" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 10 ;
+		lv2:default 0 ;
+		lv2:minimum -1 ;
+		lv2:maximum 47 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "Disabled" ;
+			rdf:value -1
+		] , [
+			rdfs:label "CSAW" ;
+			rdf:value 0
+		] , [
+			rdfs:label "/\\-_" ;
+			rdf:value 1
+		] , [
+			rdfs:label "//-_" ;
+			rdf:value 2
+		] , [
+			rdfs:label "FOLD" ;
+			rdf:value 3
+		] , [
+			rdfs:label "uuuu" ;
+			rdf:value 4
+		] , [
+			rdfs:label "SUB-" ;
+			rdf:value 5
+		] , [
+			rdfs:label "SUB/" ;
+			rdf:value 6
+		] , [
+			rdfs:label "SYN-" ;
+			rdf:value 7
+		] , [
+			rdfs:label "SYN/" ;
+			rdf:value 8
+		] , [
+			rdfs:label "//x3" ;
+			rdf:value 9
+		] , [
+			rdfs:label "-_x3" ;
+			rdf:value 10
+		] , [
+			rdfs:label "/\\x3" ;
+			rdf:value 11
+		] , [
+			rdfs:label "SIx3" ;
+			rdf:value 12
+		] , [
+			rdfs:label "RING" ;
+			rdf:value 13
+		] , [
+			rdfs:label "////" ;
+			rdf:value 14
+		] , [
+			rdfs:label "//uu" ;
+			rdf:value 15
+		] , [
+			rdfs:label "TOY*" ;
+			rdf:value 16
+		] , [
+			rdfs:label "ZLPF" ;
+			rdf:value 17
+		] , [
+			rdfs:label "ZPKF" ;
+			rdf:value 18
+		] , [
+			rdfs:label "ZBPF" ;
+			rdf:value 19
+		] , [
+			rdfs:label "ZHPF" ;
+			rdf:value 20
+		] , [
+			rdfs:label "VOSM" ;
+			rdf:value 21
+		] , [
+			rdfs:label "VOWL" ;
+			rdf:value 22
+		] , [
+			rdfs:label "VFOF" ;
+			rdf:value 23
+		] , [
+			rdfs:label "HARM" ;
+			rdf:value 24
+		] , [
+			rdfs:label "FM  " ;
+			rdf:value 25
+		] , [
+			rdfs:label "FBFM" ;
+			rdf:value 26
+		] , [
+			rdfs:label "WTFM" ;
+			rdf:value 27
+		] , [
+			rdfs:label "PLUK" ;
+			rdf:value 28
+		] , [
+			rdfs:label "BOWD" ;
+			rdf:value 29
+		] , [
+			rdfs:label "BLOW" ;
+			rdf:value 30
+		] , [
+			rdfs:label "FLUT" ;
+			rdf:value 31
+		] , [
+			rdfs:label "BELL" ;
+			rdf:value 32
+		] , [
+			rdfs:label "DRUM" ;
+			rdf:value 33
+		] , [
+			rdfs:label "KICK" ;
+			rdf:value 34
+		] , [
+			rdfs:label "CYMB" ;
+			rdf:value 35
+		] , [
+			rdfs:label "SNAR" ;
+			rdf:value 36
+		] , [
+			rdfs:label "WTBL" ;
+			rdf:value 37
+		] , [
+			rdfs:label "WMAP" ;
+			rdf:value 38
+		] , [
+			rdfs:label "WLIN" ;
+			rdf:value 39
+		] , [
+			rdfs:label "WTx4" ;
+			rdf:value 40
+		] , [
+			rdfs:label "NOIS" ;
+			rdf:value 41
+		] , [
+			rdfs:label "TWNQ" ;
+			rdf:value 42
+		] , [
+			rdfs:label "CLKN" ;
+			rdf:value 43
+		] , [
+			rdfs:label "CLOU" ;
+			rdf:value 44
+		] , [
+			rdfs:label "PRTC" ;
+			rdf:value 45
+		] , [
+			rdfs:label "QPSK" ;
+			rdf:value 46
+		] , [
+			rdfs:label "    " ;
+			rdf:value 47
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 3 ;
+		lv2:symbol "braids_coarse" ;
+		lv2:name "Braids Coarse" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 9 ;
+		lv2:default 0 ;
+		lv2:minimum -24 ;
+		lv2:maximum 24
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 4 ;
+		lv2:symbol "braids_fine" ;
+		lv2:name "Braids Fine" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 8 ;
+		lv2:default 0 ;
+		lv2:minimum -1 ;
+		lv2:maximum 1
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 5 ;
+		lv2:symbol "braids_fm" ;
+		lv2:name "Braids FM" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 7 ;
+		lv2:default 0 ;
+		lv2:minimum -1 ;
+		lv2:maximum 1
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 6 ;
+		lv2:symbol "braids_timbre" ;
+		lv2:name "Braids Timbre" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 6 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 7 ;
+		lv2:symbol "braids_color" ;
+		lv2:name "Braids Color" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 5 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 8 ;
+		lv2:symbol "braids_attack" ;
+		lv2:name "Braids Attack" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 4 ;
+		lv2:default 0.1 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 5.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 9 ;
+		lv2:symbol "braids_decay" ;
+		lv2:name "Braids Decay" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 3 ;
+		lv2:default 0.3 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 5.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 10 ;
+		lv2:symbol "braids_sustain" ;
+		lv2:name "Braids Sustain" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 2 ;
+		lv2:default 0.7 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 11 ;
+		lv2:symbol "braids_release" ;
+		lv2:name "Braids Release" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 10.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 12 ;
+		lv2:symbol "plaits_level" ;
+		lv2:name "Plaits Level" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 12 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 13 ;
+		lv2:symbol "plaits_engine" ;
+		lv2:name "Plaits Engine" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 11 ;
+		lv2:default 0 ;
+		lv2:minimum -1 ;
+		lv2:maximum 15 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "Disabled" ;
+			rdf:value -1
+		] , [
+			rdfs:label "Pair of classic waveforms" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Waveshaping oscillator" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Two operator FM" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Granular formant oscillator" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Harmonic oscillator" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Wavetable oscillator" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Chords" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Vowel and speech synthesis" ;
+			rdf:value 7
+		] , [
+			rdfs:label "Granular cloud" ;
+			rdf:value 8
+		] , [
+			rdfs:label "Filtered noise" ;
+			rdf:value 9
+		] , [
+			rdfs:label "Particle noise" ;
+			rdf:value 10
+		] , [
+			rdfs:label "Inharmonic string modeling" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Modal resonator" ;
+			rdf:value 12
+		] , [
+			rdfs:label "Analog bass drum" ;
+			rdf:value 13
+		] , [
+			rdfs:label "Analog snare drum" ;
+			rdf:value 14
+		] , [
+			rdfs:label "Analog hi-hat" ;
+			rdf:value 15
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 14 ;
+		lv2:symbol "plaits_coarse" ;
+		lv2:name "Plaits Coarse" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 10 ;
+		lv2:default 0 ;
+		lv2:minimum -24 ;
+		lv2:maximum 24
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 15 ;
+		lv2:symbol "plaits_fine" ;
+		lv2:name "Plaits Fine" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 9 ;
+		lv2:default 0 ;
+		lv2:minimum -1 ;
+		lv2:maximum 1
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 16 ;
+		lv2:symbol "plaits_harmonics" ;
+		lv2:name "Plaits Harmonics" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 8 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 17 ;
+		lv2:symbol "plaits_timbre" ;
+		lv2:name "Plaits Timbre" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 7 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 18 ;
+		lv2:symbol "plaits_morph" ;
+		lv2:name "Plaits Morph" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 6 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 19 ;
+		lv2:symbol "plaits_lpg_decay" ;
+		lv2:name "Plaits LPG Decay" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 5 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 20 ;
+		lv2:symbol "plaits_lpg_colour" ;
+		lv2:name "Plaits LPG Colour" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 4 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 21 ;
+		lv2:symbol "plaits_attack" ;
+		lv2:name "Plaits Attack" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 3 ;
+		lv2:default 0.1 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 5.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 22 ;
+		lv2:symbol "plaits_decay" ;
+		lv2:name "Plaits Decay" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 2 ;
+		lv2:default 0.3 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 5.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 23 ;
+		lv2:symbol "plaits_sustain" ;
+		lv2:name "Plaits Sustain" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 24 ;
+		lv2:symbol "plaits_release" ;
+		lv2:name "Plaits Release" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 0 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.001 ;
+		lv2:maximum 10.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 25 ;
+		lv2:symbol "mod1_source" ;
+		lv2:name "Mod 1 Source" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 12 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 13 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "None" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Braids Env" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Plaits Env" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Velocity" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Braids Timbre" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Braids Color" ;
+			rdf:value 7
+		] , [
+			rdfs:label "Plaits Harmonics" ;
+			rdf:value 8
+		] , [
+			rdfs:label "Plaits Timbre" ;
+			rdf:value 9
+		] , [
+			rdfs:label "Plaits Morph" ;
+			rdf:value 10
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Sine" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Saw" ;
+			rdf:value 12
+		] , [
+			rdfs:label "PWM" ;
+			rdf:value 13
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 26 ;
+		lv2:symbol "mod1_target" ;
+		lv2:name "Mod 1 Target" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 11 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 18 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "None" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Braids Pitch" ;
+			rdf:value 9
+		] , [
+			rdfs:label "Braids Timbre" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Braids Color" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Braids FM" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Braids Level" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 13
+		] , [
+			rdfs:label "Plaits Pitch" ;
+			rdf:value 10
+		] , [
+			rdfs:label "Plaits Harmonics" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Plaits Timbre" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Plaits Morph" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Plaits LPG Decay" ;
+			rdf:value 7
+		] , [
+			rdfs:label "Plaits LPG Colour" ;
+			rdf:value 8
+		] , [
+			rdfs:label "Plaits Level" ;
+			rdf:value 12
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 14
+		] , [
+			rdfs:label "Reverb Time" ;
+			rdf:value 15
+		] , [
+			rdfs:label "Reverb Mix" ;
+			rdf:value 16
+		] , [
+			rdfs:label "Reverb Bass" ;
+			rdf:value 17
+		] , [
+			rdfs:label "Reverb Treble" ;
+			rdf:value 18
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 27 ;
+		lv2:symbol "mod1_amount" ;
+		lv2:name "Mod 1 Amount" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 10 ;
+		lv2:default 0.0 ;
+		lv2:minimum -1.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 28 ;
+		lv2:symbol "mod1_detune" ;
+		lv2:name "Mod 1 Detune/Speed" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 9 ;
+		lv2:default 0.0 ;
+		lv2:minimum -1.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 29 ;
+		lv2:symbol "mod2_source" ;
+		lv2:name "Mod 2 Source" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 8 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 13 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "None" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Braids Env" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Plaits Env" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Velocity" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Braids Timbre" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Braids Color" ;
+			rdf:value 7
+		] , [
+			rdfs:label "Plaits Harmonics" ;
+			rdf:value 8
+		] , [
+			rdfs:label "Plaits Timbre" ;
+			rdf:value 9
+		] , [
+			rdfs:label "Plaits Morph" ;
+			rdf:value 10
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Sine" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Saw" ;
+			rdf:value 12
+		] , [
+			rdfs:label "PWM" ;
+			rdf:value 13
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 30 ;
+		lv2:symbol "mod2_target" ;
+		lv2:name "Mod 2 Target" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 7 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 18 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "None" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Braids Pitch" ;
+			rdf:value 9
+		] , [
+			rdfs:label "Braids Timbre" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Braids Color" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Braids FM" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Braids Level" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 13
+		] , [
+			rdfs:label "Plaits Pitch" ;
+			rdf:value 10
+		] , [
+			rdfs:label "Plaits Harmonics" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Plaits Timbre" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Plaits Morph" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Plaits LPG Decay" ;
+			rdf:value 7
+		] , [
+			rdfs:label "Plaits LPG Colour" ;
+			rdf:value 8
+		] , [
+			rdfs:label "Plaits Level" ;
+			rdf:value 12
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 14
+		] , [
+			rdfs:label "Reverb Time" ;
+			rdf:value 15
+		] , [
+			rdfs:label "Reverb Mix" ;
+			rdf:value 16
+		] , [
+			rdfs:label "Reverb Bass" ;
+			rdf:value 17
+		] , [
+			rdfs:label "Reverb Treble" ;
+			rdf:value 18
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 31 ;
+		lv2:symbol "mod2_amount" ;
+		lv2:name "Mod 2 Amount" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 6 ;
+		lv2:default 0.0 ;
+		lv2:minimum -1.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 32 ;
+		lv2:symbol "mod2_detune" ;
+		lv2:name "Mod 2 Detune/Speed" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 5 ;
+		lv2:default 0.0 ;
+		lv2:minimum -1.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 33 ;
+		lv2:symbol "mod3_source" ;
+		lv2:name "Mod 3 Source" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 4 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 13 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "None" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Braids Env" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Plaits Env" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Velocity" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Braids Timbre" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Braids Color" ;
+			rdf:value 7
+		] , [
+			rdfs:label "Plaits Harmonics" ;
+			rdf:value 8
+		] , [
+			rdfs:label "Plaits Timbre" ;
+			rdf:value 9
+		] , [
+			rdfs:label "Plaits Morph" ;
+			rdf:value 10
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Sine" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Saw" ;
+			rdf:value 12
+		] , [
+			rdfs:label "PWM" ;
+			rdf:value 13
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 34 ;
+		lv2:symbol "mod3_target" ;
+		lv2:name "Mod 3 Target" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 3 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 18 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "None" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Braids Pitch" ;
+			rdf:value 9
+		] , [
+			rdfs:label "Braids Timbre" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Braids Color" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Braids FM" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Braids Level" ;
+			rdf:value 11
+		] , [
+			rdfs:label "Braids Out" ;
+			rdf:value 13
+		] , [
+			rdfs:label "Plaits Pitch" ;
+			rdf:value 10
+		] , [
+			rdfs:label "Plaits Harmonics" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Plaits Timbre" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Plaits Morph" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Plaits LPG Decay" ;
+			rdf:value 7
+		] , [
+			rdfs:label "Plaits LPG Colour" ;
+			rdf:value 8
+		] , [
+			rdfs:label "Plaits Level" ;
+			rdf:value 12
+		] , [
+			rdfs:label "Plaits Out" ;
+			rdf:value 14
+		] , [
+			rdfs:label "Reverb Time" ;
+			rdf:value 15
+		] , [
+			rdfs:label "Reverb Mix" ;
+			rdf:value 16
+		] , [
+			rdfs:label "Reverb Bass" ;
+			rdf:value 17
+		] , [
+			rdfs:label "Reverb Treble" ;
+			rdf:value 18
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 35 ;
+		lv2:symbol "mod3_amount" ;
+		lv2:name "Mod 3 Amount" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 2 ;
+		lv2:default 0.0 ;
+		lv2:minimum -1.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 36 ;
+		lv2:symbol "mod3_detune" ;
+		lv2:name "Mod 3 Detune/Speed" ;
+		pg:group mutated:modulation ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.0 ;
+		lv2:minimum -1.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 37 ;
+		lv2:symbol "filter_type" ;
+		lv2:name "Filter Type" ;
+		pg:group mutated:filter ;
+		lv2:displayPriority 4 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 7 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "Off" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Moog Ladder" ;
+			rdf:value 1
+		] , [
+			rdfs:label "MS-20" ;
+			rdf:value 2
+		] , [
+			rdfs:label "TB-303" ;
+			rdf:value 3
+		] , [
+			rdfs:label "SEM" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Sallen-Key" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Diode Ladder" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Oberheim" ;
+			rdf:value 7
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 38 ;
+		lv2:symbol "filter_routing" ;
+		lv2:name "Filter Routing" ;
+		pg:group mutated:filter ;
+		lv2:displayPriority 3 ;
+		lv2:default 2 ;
+		lv2:minimum 0 ;
+		lv2:maximum 2 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "Braids" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Plaits" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Both" ;
+			rdf:value 2
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 39 ;
+		lv2:symbol "filter_cutoff" ;
+		lv2:name "Filter Cutoff" ;
+		pg:group mutated:filter ;
+		lv2:displayPriority 2 ;
+		lv2:default 1.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 40 ;
+		lv2:symbol "filter_resonance" ;
+		lv2:name "Filter Resonance" ;
+		pg:group mutated:filter ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 41 ;
+		lv2:symbol "filter2_type" ;
+		lv2:name "Filter 2 Type" ;
+		pg:group mutated:filter2 ;
+		lv2:displayPriority 4 ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 7 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "Off" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Moog Ladder" ;
+			rdf:value 1
+		] , [
+			rdfs:label "MS-20" ;
+			rdf:value 2
+		] , [
+			rdfs:label "TB-303" ;
+			rdf:value 3
+		] , [
+			rdfs:label "SEM" ;
+			rdf:value 4
+		] , [
+			rdfs:label "Sallen-Key" ;
+			rdf:value 5
+		] , [
+			rdfs:label "Diode Ladder" ;
+			rdf:value 6
+		] , [
+			rdfs:label "Oberheim" ;
+			rdf:value 7
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 42 ;
+		lv2:symbol "filter2_routing" ;
+		lv2:name "Filter 2 Routing" ;
+		pg:group mutated:filter2 ;
+		lv2:displayPriority 3 ;
+		lv2:default 2 ;
+		lv2:minimum 0 ;
+		lv2:maximum 2 ;
+		lv2:portProperty lv2:integer ,
+			lv2:enumeration ;
+		lv2:scalePoint [
+			rdfs:label "Braids" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Plaits" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Both" ;
+			rdf:value 2
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 43 ;
+		lv2:symbol "filter2_cutoff" ;
+		lv2:name "Filter 2 Cutoff" ;
+		pg:group mutated:filter2 ;
+		lv2:displayPriority 2 ;
+		lv2:default 1.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 44 ;
+		lv2:symbol "filter2_resonance" ;
+		lv2:name "Filter 2 Resonance" ;
+		pg:group mutated:filter2 ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 45 ;
+		lv2:symbol "braids_pan" ;
+		lv2:name "Braids Pan" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 46 ;
+		lv2:symbol "braids_glide" ;
+		lv2:name "Braids Glide" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 0 ;
+		lv2:default 0.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 47 ;
+		lv2:symbol "plaits_pan" ;
+		lv2:name "Plaits Pan" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 1 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 48 ;
+		lv2:symbol "plaits_glide" ;
+		lv2:name "Plaits Glide" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 0 ;
+		lv2:default 0.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 49 ;
+		lv2:symbol "braids_detune" ;
+		lv2:name "Braids Detune" ;
+		pg:group mutated:braids ;
+		lv2:displayPriority 0 ;
+		lv2:default 0.0 ;
+		lv2:minimum -48.0 ;
+		lv2:maximum 48.0 ;
+		units:unit units:semitone12TET
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 50 ;
+		lv2:symbol "plaits_detune" ;
+		lv2:name "Plaits Detune" ;
+		pg:group mutated:plaits ;
+		lv2:displayPriority 0 ;
+		lv2:default 0.0 ;
+		lv2:minimum -48.0 ;
+		lv2:maximum 48.0 ;
+		units:unit units:semitone12TET
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 51 ;
+		lv2:symbol "reverb_routing" ;
+		lv2:name "Reverb Routing" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 10 ;
+		lv2:portProperty lv2:enumeration ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 4 ;
+		lv2:scalePoint [
+			rdfs:label "Off (Bypass)" ;
+			rdf:value 0
+		] , [
+			rdfs:label "Braids Only" ;
+			rdf:value 1
+		] , [
+			rdfs:label "Plaits Only" ;
+			rdf:value 2
+		] , [
+			rdfs:label "Both Oscillators" ;
+			rdf:value 3
+		] , [
+			rdfs:label "Post-Filter (Mixed)" ;
+			rdf:value 4
+		]
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 52 ;
+		lv2:symbol "reverb_time" ;
+		lv2:name "Reverb Time" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 9 ;
+		lv2:default 2.2 ;
+		lv2:minimum 0.5 ;
+		lv2:maximum 8.0 ;
+		units:unit units:s
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 53 ;
+		lv2:symbol "reverb_delay" ;
+		lv2:name "Reverb Pre-Delay" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 8 ;
+		lv2:default 30.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 200.0 ;
+		units:unit units:ms
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 54 ;
+		lv2:symbol "reverb_bass" ;
+		lv2:name "Reverb Bass" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 7 ;
+		lv2:default 0.0 ;
+		lv2:minimum -1.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 55 ;
+		lv2:symbol "reverb_treble" ;
+		lv2:name "Reverb Treble" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 6 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 56 ;
+		lv2:symbol "reverb_mix" ;
+		lv2:name "Reverb Mix" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 5 ;
+		lv2:default 0.3 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 57 ;
+		lv2:symbol "reverb_size" ;
+		lv2:name "Reverb Size" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 4 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 58 ;
+		lv2:symbol "reverb_diffusion" ;
+		lv2:name "Reverb Diffusion" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 3 ;
+		lv2:default 0.7 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 59 ;
+		lv2:symbol "reverb_modulation" ;
+		lv2:name "Reverb Modulation" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 2 ;
+		lv2:default 0.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 60 ;
+		lv2:symbol "reverb_width" ;
+		lv2:name "Reverb Width" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 1 ;
+		lv2:default 1.0 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 1.0
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 61 ;
+		lv2:symbol "reverb_gain" ;
+		lv2:name "Reverb Gain" ;
+		pg:group mutated:reverb ;
+		lv2:displayPriority 0 ;
+		lv2:default 1.5 ;
+		lv2:minimum 0.0 ;
+		lv2:maximum 4.0
+	] , [
+		a lv2:OutputPort , lv2:AudioPort ;
+		lv2:index 62 ;
+		lv2:symbol "out_l" ;
+		lv2:name "Out L"
+	] , [
+		a lv2:OutputPort , lv2:AudioPort ;
+		lv2:index 63 ;
+		lv2:symbol "out_r" ;
+		lv2:name "Out R"
+	] .
+
+mutated:braids
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Braids Oscillator" ;
+	lv2:symbol "braids" ;
+	lv2:displayPriority 7 .
+
+mutated:plaits
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Plaits Oscillator" ;
+	lv2:symbol "plaits" ;
+	lv2:displayPriority 6 .
+
+mutated:modulation
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Modulation Matrix" ;
+	lv2:symbol "modulation" ;
+	lv2:displayPriority 5 .
+
+mutated:filter
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Filter 1" ;
+	lv2:symbol "filter" ;
+	lv2:displayPriority 4 .
+
+mutated:filter2
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Filter 2" ;
+	lv2:symbol "filter2" ;
+	lv2:displayPriority 3 .
+
+mutated:reverb
+	a pg:Group ,
+		pg:InputGroup ;
+	lv2:name "Reverb" ;
+	lv2:symbol "reverb" ;
+	lv2:displayPriority 2 .

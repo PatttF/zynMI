@@ -3,7 +3,6 @@
 
 # Paths
 SRC_DIR = ./src
-EURORACK_DIR = $(SRC_DIR)/eurorack
 
 # Build architecture selection
 # Use: make ARCH=x86_64 for native x86_64 builds (default)
@@ -26,14 +25,18 @@ endif
 CXXFLAGS = -std=c++11 -O2 -fPIC -DTEST \
 	$(ARCH_FLAGS) \
 	-fno-finite-math-only \
-	-I$(EURORACK_DIR) \
+	-I$(SRC_DIR) \
 	-Wno-unused-local-typedefs \
 	-Wno-unused-parameter
 
 LDFLAGS = -shared -lm
 
+# UI-specific flags
+UI_CXXFLAGS = $(CXXFLAGS) -I/usr/include/GL
+UI_LDFLAGS = -shared -lGL -lGLU -lGLX -lX11 -lm
+
 # Plugin names
-PLUGINS = mutated mutated_sequences marbles
+PLUGINS = mutated mutated_sequences
 
 # Default target - build both architectures
 all: x86_64 aarch64
@@ -50,36 +53,36 @@ plugins: $(PLUGINS)
 
 # Common Mutable Instruments source files
 STMLIB_SOURCES = \
-	$(EURORACK_DIR)/stmlib/utils/random.cc \
-	$(EURORACK_DIR)/stmlib/dsp/atan.cc \
-	$(EURORACK_DIR)/stmlib/dsp/units.cc
+	$(SRC_DIR)/stmlib/utils/random.cc \
+	$(SRC_DIR)/stmlib/dsp/atan.cc \
+	$(SRC_DIR)/stmlib/dsp/units.cc
 
 # Plaits sources (used by Mutated Instruments)
 PLAITS_SOURCES = \
-	$(wildcard $(EURORACK_DIR)/plaits/dsp/*.cc) \
-	$(wildcard $(EURORACK_DIR)/plaits/dsp/engine/*.cc) \
-	$(wildcard $(EURORACK_DIR)/plaits/dsp/speech/*.cc) \
-	$(wildcard $(EURORACK_DIR)/plaits/dsp/physical_modelling/*.cc) \
-	$(EURORACK_DIR)/plaits/resources.cc
+	$(wildcard $(SRC_DIR)/plaits/dsp/*.cc) \
+	$(wildcard $(SRC_DIR)/plaits/dsp/engine/*.cc) \
+	$(wildcard $(SRC_DIR)/plaits/dsp/speech/*.cc) \
+	$(wildcard $(SRC_DIR)/plaits/dsp/physical_modelling/*.cc) \
+	$(SRC_DIR)/plaits/resources.cc
 
 # Braids sources (used by Mutated Instruments)
 BRAIDS_SOURCES = \
-	$(EURORACK_DIR)/braids/macro_oscillator.cc \
-	$(EURORACK_DIR)/braids/analog_oscillator.cc \
-	$(EURORACK_DIR)/braids/digital_oscillator.cc \
-	$(EURORACK_DIR)/braids/quantizer.cc \
-	$(EURORACK_DIR)/braids/resources.cc
+	$(SRC_DIR)/braids/macro_oscillator.cc \
+	$(SRC_DIR)/braids/analog_oscillator.cc \
+	$(SRC_DIR)/braids/digital_oscillator.cc \
+	$(SRC_DIR)/braids/quantizer.cc \
+	$(SRC_DIR)/braids/resources.cc
 
 # Marbles sources (used by Chaos Engine)
 MARBLES_SOURCES = \
-	$(EURORACK_DIR)/marbles/random/t_generator.cc \
-	$(EURORACK_DIR)/marbles/random/x_y_generator.cc \
-	$(EURORACK_DIR)/marbles/random/output_channel.cc \
-	$(EURORACK_DIR)/marbles/random/quantizer.cc \
-	$(EURORACK_DIR)/marbles/random/lag_processor.cc \
-	$(EURORACK_DIR)/marbles/random/discrete_distribution_quantizer.cc \
-	$(EURORACK_DIR)/marbles/ramp/ramp_extractor.cc \
-	$(EURORACK_DIR)/marbles/resources.cc
+	$(SRC_DIR)/marbles/random/t_generator.cc \
+	$(SRC_DIR)/marbles/random/x_y_generator.cc \
+	$(SRC_DIR)/marbles/random/output_channel.cc \
+	$(SRC_DIR)/marbles/random/quantizer.cc \
+	$(SRC_DIR)/marbles/random/lag_processor.cc \
+	$(SRC_DIR)/marbles/random/discrete_distribution_quantizer.cc \
+	$(SRC_DIR)/marbles/ramp/ramp_extractor.cc \
+	$(SRC_DIR)/marbles/resources.cc
 
 # Build Marbles (Chaos Engine)
 marbles: $(BUILD_DIR)/mi_chaosengine.lv2/marbles.so $(BUILD_DIR)/mi_chaosengine.lv2/manifest.ttl $(BUILD_DIR)/mi_chaosengine.lv2/marbles.ttl
@@ -99,7 +102,13 @@ $(BUILD_DIR)/mi_chaosengine.lv2/marbles.ttl: $(SRC_DIR)/marbles.ttl
 	@cp $< $@
 
 # Build Mutated Instruments
-mutated: $(BUILD_DIR)/mi_mutated.lv2/mutated.so $(BUILD_DIR)/mi_mutated.lv2/manifest.ttl $(BUILD_DIR)/mi_mutated.lv2/mutated.ttl
+ifeq ($(ARCH),x86_64)
+    MUTATED_UI_TARGETS = $(BUILD_DIR)/mi_mutated.lv2/mutated_ui.so $(BUILD_DIR)/mi_mutated.lv2/mutated_ui.ttl
+else
+    MUTATED_UI_TARGETS =
+endif
+
+mutated: $(BUILD_DIR)/mi_mutated.lv2/mutated.so $(MUTATED_UI_TARGETS) $(BUILD_DIR)/mi_mutated.lv2/manifest.ttl $(BUILD_DIR)/mi_mutated.lv2/mutated.ttl
 
 $(BUILD_DIR)/mi_mutated.lv2/mutated.so: $(SRC_DIR)/mutated.cpp $(BRAIDS_SOURCES) $(PLAITS_SOURCES) $(STMLIB_SOURCES)
 	@echo "Building Mutated Instruments..."
@@ -107,11 +116,21 @@ $(BUILD_DIR)/mi_mutated.lv2/mutated.so: $(SRC_DIR)/mutated.cpp $(BRAIDS_SOURCES)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(BRAIDS_SOURCES) $(PLAITS_SOURCES) $(STMLIB_SOURCES)
 	@echo "Mutated Instruments built successfully!"
 
+$(BUILD_DIR)/mi_mutated.lv2/mutated_ui.so: $(SRC_DIR)/mutated_ui.cpp $(SRC_DIR)/imgui/imgui.cpp $(SRC_DIR)/imgui/imgui_draw.cpp $(SRC_DIR)/imgui/imgui_widgets.cpp $(SRC_DIR)/imgui/imgui_tables.cpp $(SRC_DIR)/imgui/imgui_impl_opengl2.cpp
+	@echo "Building Mutated Instruments UI (x86_64 only)..."
+	@mkdir -p $(BUILD_DIR)/mi_mutated.lv2
+	$(CXX) $(UI_CXXFLAGS) -I$(SRC_DIR)/imgui -o $@ $< $(SRC_DIR)/imgui/imgui.cpp $(SRC_DIR)/imgui/imgui_draw.cpp $(SRC_DIR)/imgui/imgui_widgets.cpp $(SRC_DIR)/imgui/imgui_tables.cpp $(SRC_DIR)/imgui/imgui_impl_opengl2.cpp $(UI_LDFLAGS)
+	@echo "Mutated Instruments UI built successfully!"
+
 $(BUILD_DIR)/mi_mutated.lv2/manifest.ttl: $(SRC_DIR)/mutated_manifest.ttl
 	@mkdir -p $(BUILD_DIR)/mi_mutated.lv2
 	@cp $< $@
 
 $(BUILD_DIR)/mi_mutated.lv2/mutated.ttl: $(SRC_DIR)/mutated.ttl
+	@mkdir -p $(BUILD_DIR)/mi_mutated.lv2
+	@cp $< $@
+
+$(BUILD_DIR)/mi_mutated.lv2/mutated_ui.ttl: $(SRC_DIR)/mutated_ui.ttl
 	@mkdir -p $(BUILD_DIR)/mi_mutated.lv2
 	@cp $< $@
 

@@ -1,0 +1,926 @@
+/*
+ * Mutated Instruments LV2 Plugin - OpenGL UI
+ * 
+ * Copyright (C) 2025 zynMI Project
+ * Licensed under GPL v3
+ */
+
+#include <lv2/lv2plug.in/ns/lv2core/lv2.h>
+#include <lv2/lv2plug.in/ns/extensions/ui/ui.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <GL/gl.h>
+#include <GL/glx.h>
+#include <GL/glu.h>
+#include <cmath>
+#include <cstring>
+#include <vector>
+#include <string>
+
+#define MUTATED_UI_URI "https://github.com/PatttF/zynMI/plugins/mutated#ui"
+
+// Surge XT-inspired color palette (greys)
+namespace Colors {
+    const float Background[3] = {0.12f, 0.12f, 0.13f};      // Dark grey background
+    const float Panel[3] = {0.16f, 0.16f, 0.17f};           // Panel background
+    const float PanelLight[3] = {0.20f, 0.20f, 0.21f};      // Light panel
+    const float Border[3] = {0.25f, 0.25f, 0.26f};          // Borders
+    const float Text[3] = {0.85f, 0.85f, 0.86f};            // Text
+    const float TextDim[3] = {0.50f, 0.50f, 0.51f};         // Dim text
+    const float Accent[3] = {0.35f, 0.65f, 0.85f};          // Blue accent
+    const float AccentHover[3] = {0.45f, 0.75f, 0.95f};     // Light blue hover
+    const float Knob[3] = {0.28f, 0.28f, 0.29f};            // Knob body
+    const float KnobIndicator[3] = {0.85f, 0.85f, 0.86f};   // Knob indicator
+    const float Slider[3] = {0.22f, 0.22f, 0.23f};          // Slider track
+    const float SliderFill[3] = {0.40f, 0.70f, 0.90f};      // Slider fill
+}
+
+// UI state
+enum Tab {
+    TAB_BRAIDS,
+    TAB_PLAITS,
+    TAB_MODULATION,
+    TAB_FILTER1,
+    TAB_FILTER2,
+    TAB_REVERB
+};
+
+struct KnobWidget {
+    float x, y;
+    float radius;
+    uint32_t port;
+    float value;
+    float min, max;
+    float default_val;
+    std::string label;
+    bool dragging;
+    float drag_start_y;
+    float drag_start_value;
+};
+
+struct SliderWidget {
+    float x, y, w, h;
+    uint32_t port;
+    float value;
+    float min, max;
+    std::string label;
+    bool dragging;
+};
+
+struct DropdownWidget {
+    float x, y, w, h;
+    uint32_t port;
+    int value;  // Current selected index
+    int min, max;
+    std::vector<std::string> labels;
+    std::string label;
+    bool expanded;
+    int hover_item;
+};
+
+struct TabButton {
+    float x, y, w, h;
+    Tab tab;
+    std::string label;
+    bool hovered;
+};
+
+struct MutatedUI {
+    LV2UI_Write_Function write;
+    LV2UI_Controller controller;
+    
+    Display* display;
+    Window parent;
+    Window window;
+    GLXContext gl_context;
+    int width, height;
+    
+    Tab current_tab;
+    std::vector<TabButton> tabs;
+    std::vector<KnobWidget> knobs;
+    std::vector<SliderWidget> sliders;
+    std::vector<DropdownWidget> dropdowns;
+    
+    double mouse_x, mouse_y;
+    bool mouse_down;
+};
+
+// Helper functions
+void DrawRect(float x, float y, float w, float h, const float color[3]) {
+    glColor3fv(color);
+    glBegin(GL_QUADS);
+    glVertex2f(x, y);
+    glVertex2f(x + w, y);
+    glVertex2f(x + w, y + h);
+    glVertex2f(x, y + h);
+    glEnd();
+}
+
+void DrawCircle(float cx, float cy, float radius, const float color[3], int segments = 32) {
+    glColor3fv(color);
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex2f(cx, cy);
+    for (int i = 0; i <= segments; i++) {
+        float angle = 2.0f * M_PI * i / segments;
+        glVertex2f(cx + cos(angle) * radius, cy + sin(angle) * radius);
+    }
+    glEnd();
+}
+
+void DrawLine(float x1, float y1, float x2, float y2, const float color[3], float width = 1.0f) {
+    glColor3fv(color);
+    glLineWidth(width);
+    glBegin(GL_LINES);
+    glVertex2f(x1, y1);
+    glVertex2f(x2, y2);
+    glEnd();
+}
+
+// Simple 5x7 bitmap font - draws clean readable text
+void DrawText(float x, float y, const char* text, const float color[3]) {
+    if (!text || !text[0]) return;
+    
+    glColor3fv(color);
+    
+    float char_width = 8.0f;
+    float char_height = 12.0f;
+    float pixel_size = 1.5f;
+    
+    for (int i = 0; text[i] != '\0'; i++) {
+        char c = text[i];
+        float cx = x + i * char_width;
+        
+        // Simple 5x7 bitmap patterns
+        unsigned char pattern[7] = {0};
+        
+        if (c >= 'A' && c <= 'Z') c = c + 32; // Convert to lowercase
+        
+        switch(c) {
+            case 'a': pattern[0]=0x1E; pattern[1]=0x05; pattern[2]=0x1F; pattern[3]=0x15; pattern[4]=0x1F; break;
+            case 'b': pattern[0]=0x10; pattern[1]=0x10; pattern[2]=0x1E; pattern[3]=0x11; pattern[4]=0x1E; break;
+            case 'c': pattern[0]=0x0E; pattern[1]=0x10; pattern[2]=0x10; pattern[3]=0x10; pattern[4]=0x0E; break;
+            case 'd': pattern[0]=0x01; pattern[1]=0x01; pattern[2]=0x0F; pattern[3]=0x11; pattern[4]=0x0F; break;
+            case 'e': pattern[0]=0x0E; pattern[1]=0x11; pattern[2]=0x1F; pattern[3]=0x10; pattern[4]=0x0F; break;
+            case 'f': pattern[0]=0x06; pattern[1]=0x09; pattern[2]=0x1E; pattern[3]=0x08; pattern[4]=0x08; break;
+            case 'g': pattern[0]=0x0F; pattern[1]=0x11; pattern[2]=0x0F; pattern[3]=0x01; pattern[4]=0x1E; break;
+            case 'h': pattern[0]=0x10; pattern[1]=0x10; pattern[2]=0x1E; pattern[3]=0x11; pattern[4]=0x11; break;
+            case 'i': pattern[0]=0x04; pattern[1]=0x00; pattern[2]=0x0C; pattern[3]=0x04; pattern[4]=0x0E; break;
+            case 'l': pattern[0]=0x0C; pattern[1]=0x04; pattern[2]=0x04; pattern[3]=0x04; pattern[4]=0x0E; break;
+            case 'm': pattern[0]=0x00; pattern[1]=0x1A; pattern[2]=0x15; pattern[3]=0x15; pattern[4]=0x11; break;
+            case 'n': pattern[0]=0x00; pattern[1]=0x16; pattern[2]=0x19; pattern[3]=0x11; pattern[4]=0x11; break;
+            case 'o': pattern[0]=0x0E; pattern[1]=0x11; pattern[2]=0x11; pattern[3]=0x11; pattern[4]=0x0E; break;
+            case 'p': pattern[0]=0x1E; pattern[1]=0x11; pattern[2]=0x1E; pattern[3]=0x10; pattern[4]=0x10; break;
+            case 'r': pattern[0]=0x00; pattern[1]=0x16; pattern[2]=0x19; pattern[3]=0x10; pattern[4]=0x10; break;
+            case 's': pattern[0]=0x0F; pattern[1]=0x10; pattern[2]=0x0E; pattern[3]=0x01; pattern[4]=0x1E; break;
+            case 't': pattern[0]=0x08; pattern[1]=0x1C; pattern[2]=0x08; pattern[3]=0x09; pattern[4]=0x06; break;
+            case 'u': pattern[0]=0x00; pattern[1]=0x11; pattern[2]=0x11; pattern[3]=0x13; pattern[4]=0x0D; break;
+            case 'v': pattern[0]=0x00; pattern[1]=0x11; pattern[2]=0x11; pattern[3]=0x0A; pattern[4]=0x04; break;
+            case 'w': pattern[0]=0x00; pattern[1]=0x11; pattern[2]=0x15; pattern[3]=0x15; pattern[4]=0x0A; break;
+            case 'x': pattern[0]=0x00; pattern[1]=0x11; pattern[2]=0x0A; pattern[3]=0x04; pattern[4]=0x11; break;
+            case 'y': pattern[0]=0x11; pattern[1]=0x11; pattern[2]=0x0F; pattern[3]=0x01; pattern[4]=0x0E; break;
+            case 'z': pattern[0]=0x1F; pattern[1]=0x02; pattern[2]=0x04; pattern[3]=0x08; pattern[4]=0x1F; break;
+            case '0': pattern[0]=0x0E; pattern[1]=0x13; pattern[2]=0x15; pattern[3]=0x19; pattern[4]=0x0E; break;
+            case '1': pattern[0]=0x04; pattern[1]=0x0C; pattern[2]=0x04; pattern[3]=0x04; pattern[4]=0x0E; break;
+            case '2': pattern[0]=0x0E; pattern[1]=0x11; pattern[2]=0x06; pattern[3]=0x08; pattern[4]=0x1F; break;
+            case '3': pattern[0]=0x1F; pattern[1]=0x02; pattern[2]=0x06; pattern[3]=0x11; pattern[4]=0x0E; break;
+            case '4': pattern[0]=0x02; pattern[1]=0x0A; pattern[2]=0x12; pattern[3]=0x1F; pattern[4]=0x02; break;
+            case '5': pattern[0]=0x1F; pattern[1]=0x10; pattern[2]=0x1E; pattern[3]=0x01; pattern[4]=0x1E; break;
+            case '6': pattern[0]=0x06; pattern[1]=0x08; pattern[2]=0x1E; pattern[3]=0x11; pattern[4]=0x0E; break;
+            case '7': pattern[0]=0x1F; pattern[1]=0x01; pattern[2]=0x02; pattern[3]=0x04; pattern[4]=0x04; break;
+            case '8': pattern[0]=0x0E; pattern[1]=0x11; pattern[2]=0x0E; pattern[3]=0x11; pattern[4]=0x0E; break;
+            case '9': pattern[0]=0x0E; pattern[1]=0x11; pattern[2]=0x0F; pattern[3]=0x01; pattern[4]=0x0E; break;
+            case '-': pattern[0]=0x00; pattern[1]=0x00; pattern[2]=0x1F; pattern[3]=0x00; pattern[4]=0x00; break;
+            case '.': pattern[0]=0x00; pattern[1]=0x00; pattern[2]=0x00; pattern[3]=0x00; pattern[4]=0x04; break;
+            case '/': pattern[0]=0x01; pattern[1]=0x02; pattern[2]=0x04; pattern[3]=0x08; pattern[4]=0x10; break;
+            case '\\': pattern[0]=0x10; pattern[1]=0x08; pattern[2]=0x04; pattern[3]=0x02; pattern[4]=0x01; break;
+            case ' ': break; // Space
+            default: pattern[0]=0x1F; pattern[1]=0x11; pattern[2]=0x11; pattern[3]=0x11; pattern[4]=0x1F; break;
+        }
+        
+        // Draw pixels based on pattern
+        for (int row = 0; row < 5; row++) {
+            for (int col = 0; col < 5; col++) {
+                if (pattern[row] & (1 << (4 - col))) {
+                    float px = cx + col * pixel_size;
+                    float py = y + row * pixel_size;
+                    glBegin(GL_QUADS);
+                    glVertex2f(px, py);
+                    glVertex2f(px + pixel_size, py);
+                    glVertex2f(px + pixel_size, py + pixel_size);
+                    glVertex2f(px, py + pixel_size);
+                    glEnd();
+                }
+            }
+        }
+    }
+}
+
+
+
+void DrawKnob(const KnobWidget& knob, bool hovered) {
+    // Draw knob body
+    const float* color = hovered ? Colors::AccentHover : Colors::Knob;
+    DrawCircle(knob.x, knob.y, knob.radius, color);
+    
+    // Draw border
+    DrawCircle(knob.x, knob.y, knob.radius + 1.5f, Colors::Border);
+    DrawCircle(knob.x, knob.y, knob.radius, color);
+    
+    // Draw value indicator
+    float angle = -135.0f + (knob.value - knob.min) / (knob.max - knob.min) * 270.0f;
+    float rad = angle * M_PI / 180.0f;
+    float ix = knob.x + cos(rad) * knob.radius * 0.7f;
+    float iy = knob.y + sin(rad) * knob.radius * 0.7f;
+    DrawLine(knob.x, knob.y, ix, iy, Colors::KnobIndicator, 2.0f);
+    
+    // Draw label
+    DrawText(knob.x - 30, knob.y + knob.radius + 15, knob.label.c_str(), Colors::Text);
+}
+
+void DrawSlider(const SliderWidget& slider, bool hovered) {
+    // Draw track
+    DrawRect(slider.x, slider.y, slider.w, slider.h, Colors::Slider);
+    
+    // Draw fill
+    float fill_w = (slider.value - slider.min) / (slider.max - slider.min) * slider.w;
+    const float* color = hovered ? Colors::SliderFill : Colors::Accent;
+    DrawRect(slider.x, slider.y, fill_w, slider.h, color);
+    
+    // Draw border
+    glColor3fv(Colors::Border);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(slider.x, slider.y);
+    glVertex2f(slider.x + slider.w, slider.y);
+    glVertex2f(slider.x + slider.w, slider.y + slider.h);
+    glVertex2f(slider.x, slider.y + slider.h);
+    glEnd();
+    
+    // Draw label
+    DrawText(slider.x, slider.y - 15, slider.label.c_str(), Colors::Text);
+}
+
+void DrawDropdown(const DropdownWidget& dropdown, bool hovered) {
+    // Draw main box
+    const float* bg_color = hovered ? Colors::PanelLight : Colors::Panel;
+    DrawRect(dropdown.x, dropdown.y, dropdown.w, dropdown.h, bg_color);
+    
+    // Draw border
+    glColor3fv(Colors::Border);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(dropdown.x, dropdown.y);
+    glVertex2f(dropdown.x + dropdown.w, dropdown.y);
+    glVertex2f(dropdown.x + dropdown.w, dropdown.y + dropdown.h);
+    glVertex2f(dropdown.x, dropdown.y + dropdown.h);
+    glEnd();
+    
+    // Draw current value text
+    if (dropdown.value >= 0 && dropdown.value < dropdown.labels.size()) {
+        DrawText(dropdown.x + 5, dropdown.y + dropdown.h - 18, 
+                 dropdown.labels[dropdown.value].c_str(), Colors::Text);
+    }
+    
+    // Draw dropdown arrow
+    float arrow_x = dropdown.x + dropdown.w - 15;
+    float arrow_y = dropdown.y + dropdown.h / 2;
+    glColor3fv(Colors::Text);
+    glBegin(GL_TRIANGLES);
+    glVertex2f(arrow_x - 4, arrow_y - 2);
+    glVertex2f(arrow_x + 4, arrow_y - 2);
+    glVertex2f(arrow_x, arrow_y + 3);
+    glEnd();
+    
+    // Draw label above dropdown
+    DrawText(dropdown.x, dropdown.y - 15, dropdown.label.c_str(), Colors::Text);
+    
+    // Draw expanded menu if open
+    if (dropdown.expanded) {
+        float menu_h = dropdown.labels.size() * 20.0f;
+        DrawRect(dropdown.x, dropdown.y + dropdown.h, dropdown.w, menu_h, Colors::Background);
+        
+        // Draw menu border
+        glColor3fv(Colors::Border);
+        glBegin(GL_LINE_LOOP);
+        glVertex2f(dropdown.x, dropdown.y + dropdown.h);
+        glVertex2f(dropdown.x + dropdown.w, dropdown.y + dropdown.h);
+        glVertex2f(dropdown.x + dropdown.w, dropdown.y + dropdown.h + menu_h);
+        glVertex2f(dropdown.x, dropdown.y + dropdown.h + menu_h);
+        glEnd();
+        
+        // Draw menu items
+        for (size_t i = 0; i < dropdown.labels.size(); i++) {
+            float item_y = dropdown.y + dropdown.h + i * 20.0f;
+            
+            // Highlight hovered/selected items
+            if (i == dropdown.hover_item) {
+                DrawRect(dropdown.x, item_y, dropdown.w, 20.0f, Colors::AccentHover);
+            } else if (i == dropdown.value) {
+                DrawRect(dropdown.x, item_y, dropdown.w, 20.0f, Colors::Accent);
+            }
+            
+            DrawText(dropdown.x + 5, item_y + 15, dropdown.labels[i].c_str(), Colors::Text);
+        }
+    }
+}
+
+void DrawTab(const TabButton& tab, bool active) {
+    const float* bg_color = active ? Colors::Accent : (tab.hovered ? Colors::PanelLight : Colors::Panel);
+    DrawRect(tab.x, tab.y, tab.w, tab.h, bg_color);
+    
+    // Border
+    glColor3fv(Colors::Border);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(tab.x, tab.y);
+    glVertex2f(tab.x + tab.w, tab.y);
+    glVertex2f(tab.x + tab.w, tab.y + tab.h);
+    glVertex2f(tab.x, tab.y + tab.h);
+    glEnd();
+    
+    // Label
+    const float* text_color = active ? Colors::Background : Colors::Text;
+    DrawText(tab.x + tab.w / 2 - 30, tab.y + tab.h / 2 + 5, tab.label.c_str(), text_color);
+}
+
+void InitializeTabs(MutatedUI* ui) {
+    float tab_width = ui->width / 5.0f;
+    float tab_height = 40.0f;
+    
+    ui->tabs.clear();
+    ui->tabs.push_back({0 * tab_width, 0, tab_width, tab_height, TAB_BRAIDS, "Oscillators", false});
+    ui->tabs.push_back({1 * tab_width, 0, tab_width, tab_height, TAB_MODULATION, "Modulation", false});
+    ui->tabs.push_back({2 * tab_width, 0, tab_width, tab_height, TAB_FILTER1, "Filter 1", false});
+    ui->tabs.push_back({3 * tab_width, 0, tab_width, tab_height, TAB_FILTER2, "Filter 2", false});
+    ui->tabs.push_back({4 * tab_width, 0, tab_width, tab_height, TAB_REVERB, "Reverb", false});
+}
+
+void InitializeBraidsControls(MutatedUI* ui) {
+    ui->knobs.clear();
+    ui->sliders.clear();
+    ui->dropdowns.clear();
+    
+    float start_y = 100.0f;
+    float spacing = 110.0f;
+    float col1 = 60.0f;
+    float col2 = col1 + spacing;
+    float col3 = col2 + spacing;
+    float col4 = col3 + spacing;
+    float col5 = col4 + spacing;
+    float col6 = col5 + spacing + 40.0f;  // Extra space between Braids and Plaits
+    float col7 = col6 + spacing;
+    float col8 = col7 + spacing;
+    float col9 = col8 + spacing;
+    float col10 = col9 + spacing;
+    float knob_radius = 35.0f;
+    float row_spacing = 120.0f;
+    
+    // BRAIDS (Left side)
+    // Row 1: Level, Shape (dropdown), Coarse, Fine, FM
+    ui->knobs.push_back({col1, start_y, knob_radius, 1, 0.5f, 0.0f, 1.0f, 0.5f, "Level", false, 0, 0});
+    
+    // Braids Shape dropdown (port 2)
+    std::vector<std::string> braids_shapes = {
+        "Disabled", "CSAW", "/\\-_", "//-_", "FOLD", "uuuu", "SUB-", "SUB/", "SYN-", "SYN/",
+        "//x3", "-_x3", "/\\x3", "SIx3", "RING", "////", "//uu", "TOY*", "ZLPF", "ZPKF",
+        "ZBPF", "ZHPF", "VOSM", "VOWL", "VFOF", "HARM", "FM  ", "FBFM", "WTFM", "PLUK",
+        "BOWD", "BLOW", "FLUT", "BELL", "DRUM", "KICK", "CYMB", "SNAR", "WTBL", "WMAP",
+        "WLIN", "WTx4", "NOIS", "TWNQ", "CLKN", "CLOU", "PRTC", "QPSK", "    "
+    };
+    ui->dropdowns.push_back({col2, start_y + 15, 95.0f, 25.0f, 2, 0, -1, 47, braids_shapes, "Shape", false, -1});
+    ui->knobs.push_back({col3, start_y, knob_radius, 3, 0.0f, -24.0f, 24.0f, 0.0f, "Coarse", false, 0, 0});
+    ui->knobs.push_back({col4, start_y, knob_radius, 4, 0.0f, -1.0f, 1.0f, 0.0f, "Fine", false, 0, 0});
+    ui->knobs.push_back({col5, start_y, knob_radius, 5, 0.0f, 0.0f, 1.0f, 0.0f, "FM", false, 0, 0});
+    
+    // Row 2: Timbre, Color, Attack, Decay, Sustain
+    ui->knobs.push_back({col1, start_y + row_spacing, knob_radius, 6, 0.5f, 0.0f, 1.0f, 0.5f, "Timbre", false, 0, 0});
+    ui->knobs.push_back({col2, start_y + row_spacing, knob_radius, 7, 0.5f, 0.0f, 1.0f, 0.5f, "Color", false, 0, 0});
+    ui->knobs.push_back({col3, start_y + row_spacing, knob_radius, 8, 0.01f, 0.001f, 2.0f, 0.01f, "Attack", false, 0, 0});
+    ui->knobs.push_back({col4, start_y + row_spacing, knob_radius, 9, 0.1f, 0.001f, 2.0f, 0.1f, "Decay", false, 0, 0});
+    ui->knobs.push_back({col5, start_y + row_spacing, knob_radius, 10, 0.7f, 0.0f, 1.0f, 0.7f, "Sustain", false, 0, 0});
+    
+    // Row 3: Release, Pan, Glide, Detune
+    ui->knobs.push_back({col1, start_y + row_spacing*2, knob_radius, 11, 0.3f, 0.001f, 5.0f, 0.3f, "Release", false, 0, 0});
+    ui->knobs.push_back({col2, start_y + row_spacing*2, knob_radius, 49, 0.5f, 0.0f, 1.0f, 0.5f, "Pan", false, 0, 0});
+    ui->knobs.push_back({col3, start_y + row_spacing*2, knob_radius, 50, 0.0f, 0.0f, 1.0f, 0.0f, "Glide", false, 0, 0});
+    ui->knobs.push_back({col4, start_y + row_spacing*2, knob_radius, 53, 0.0f, -2.0f, 2.0f, 0.0f, "Detune", false, 0, 0});
+    
+    // PLAITS (Right side)
+    // Row 1: Level, Engine (dropdown), Coarse, Fine, Harmonics
+    ui->knobs.push_back({col6, start_y, knob_radius, 12, 0.5f, 0.0f, 1.0f, 0.5f, "Level", false, 0, 0});
+    
+    // Plaits Engine dropdown (port 13)
+    std::vector<std::string> plaits_engines = {
+        "Disabled", "Classic waves", "Waveshaper", "FM", "Formant", "Harmonic",
+        "Wavetable", "Chords", "Vowel/Speech", "Granular", "Filtered noise", 
+        "Particle noise", "Inharmonic string", "Modal resonator", "Bass drum", 
+        "Snare drum", "Hi-hat"
+    };
+    ui->dropdowns.push_back({col7, start_y + 15, 95.0f, 25.0f, 13, 0, -1, 15, plaits_engines, "Engine", false, -1});
+    ui->knobs.push_back({col8, start_y, knob_radius, 14, 0.0f, -24.0f, 24.0f, 0.0f, "Coarse", false, 0, 0});
+    ui->knobs.push_back({col9, start_y, knob_radius, 15, 0.0f, -1.0f, 1.0f, 0.0f, "Fine", false, 0, 0});
+    ui->knobs.push_back({col10, start_y, knob_radius, 16, 0.5f, 0.0f, 1.0f, 0.5f, "Harm", false, 0, 0});
+    
+    // Row 2: Timbre, Morph, LPG Decay, LPG Colour, Attack
+    ui->knobs.push_back({col6, start_y + row_spacing, knob_radius, 17, 0.5f, 0.0f, 1.0f, 0.5f, "Timbre", false, 0, 0});
+    ui->knobs.push_back({col7, start_y + row_spacing, knob_radius, 18, 0.5f, 0.0f, 1.0f, 0.5f, "Morph", false, 0, 0});
+    ui->knobs.push_back({col8, start_y + row_spacing, knob_radius, 19, 0.5f, 0.0f, 1.0f, 0.5f, "LPG-Dcy", false, 0, 0});
+    ui->knobs.push_back({col9, start_y + row_spacing, knob_radius, 20, 0.5f, 0.0f, 1.0f, 0.5f, "LPG-Col", false, 0, 0});
+    ui->knobs.push_back({col10, start_y + row_spacing, knob_radius, 21, 0.01f, 0.001f, 2.0f, 0.01f, "Attack", false, 0, 0});
+    
+    // Row 3: Decay, Sustain, Release, Pan, Glide
+    ui->knobs.push_back({col6, start_y + row_spacing*2, knob_radius, 22, 0.1f, 0.001f, 2.0f, 0.1f, "Decay", false, 0, 0});
+    ui->knobs.push_back({col7, start_y + row_spacing*2, knob_radius, 23, 0.7f, 0.0f, 1.0f, 0.7f, "Sustain", false, 0, 0});
+    ui->knobs.push_back({col8, start_y + row_spacing*2, knob_radius, 24, 0.3f, 0.001f, 5.0f, 0.3f, "Release", false, 0, 0});
+    ui->knobs.push_back({col9, start_y + row_spacing*2, knob_radius, 51, 0.5f, 0.0f, 1.0f, 0.5f, "Pan", false, 0, 0});
+    ui->knobs.push_back({col10, start_y + row_spacing*2, knob_radius, 52, 0.0f, 0.0f, 1.0f, 0.0f, "Glide", false, 0, 0});
+}
+
+void InitializeReverbControls(MutatedUI* ui) {
+    ui->knobs.clear();
+    ui->sliders.clear();
+    ui->dropdowns.clear();
+    
+    float start_y = 120.0f;
+    float spacing = 120.0f;
+    float knob_radius = 38.0f;
+    
+    // Row 1: Time, Mix, Gain, Size, Diffusion
+    ui->knobs.push_back({100, start_y, knob_radius, 56, 2.2f, 0.5f, 8.0f, 2.2f, "Time", false, 0, 0});
+    ui->knobs.push_back({220, start_y, knob_radius, 60, 0.3f, 0.0f, 1.0f, 0.3f, "Mix", false, 0, 0});
+    ui->knobs.push_back({340, start_y, knob_radius, 61, 1.5f, 0.0f, 4.0f, 1.5f, "Gain", false, 0, 0});
+    ui->knobs.push_back({460, start_y, knob_radius, 62, 0.5f, 0.5f, 2.0f, 0.5f, "Size", false, 0, 0});
+    ui->knobs.push_back({580, start_y, knob_radius, 63, 0.7f, 0.0f, 1.0f, 0.7f, "Diffusion", false, 0, 0});
+    
+    // Row 2: Modulation, Width, Delay, Bass, Treble
+    ui->knobs.push_back({100, start_y + spacing, knob_radius, 64, 0.5f, 0.0f, 1.0f, 0.5f, "Mod", false, 0, 0});
+    ui->knobs.push_back({220, start_y + spacing, knob_radius, 65, 1.0f, 0.0f, 1.0f, 1.0f, "Width", false, 0, 0});
+    ui->knobs.push_back({340, start_y + spacing, knob_radius, 57, 0.0f, 0.0f, 200.0f, 0.0f, "Pre-Dly", false, 0, 0});
+    ui->knobs.push_back({460, start_y + spacing, knob_radius, 58, 0.0f, -1.0f, 1.0f, 0.0f, "Bass", false, 0, 0});
+    ui->knobs.push_back({580, start_y + spacing, knob_radius, 59, 0.5f, 0.0f, 1.0f, 0.5f, "Treble", false, 0, 0});
+    
+    // Routing slider
+    ui->sliders.push_back({100, start_y + spacing*2, 400, 35, 55, 0.0f, 0.0f, 4.0f, "Routing", false});
+}
+
+void InitializeModulationControls(MutatedUI* ui) {
+    ui->knobs.clear();
+    ui->sliders.clear();
+    ui->dropdowns.clear();
+    
+    float start_y = 120.0f;
+    float spacing = 150.0f;
+    float col1 = 150.0f;
+    float col2 = 320.0f;
+    float col3 = 490.0f;
+    float col4 = 660.0f;
+    float knob_radius = 40.0f;
+    
+    // Modulation 1
+    ui->knobs.push_back({col1, start_y, knob_radius, 25, 0.0f, 0.0f, 12.0f, 0.0f, "Source", false, 0, 0});
+    ui->knobs.push_back({col2, start_y, knob_radius, 26, 0.0f, 0.0f, 26.0f, 0.0f, "Target", false, 0, 0});
+    ui->knobs.push_back({col3, start_y, knob_radius, 27, 0.0f, -1.0f, 1.0f, 0.0f, "Amount", false, 0, 0});
+    ui->knobs.push_back({col4, start_y, knob_radius, 28, 0.0f, -2.0f, 2.0f, 0.0f, "Detune", false, 0, 0});
+    
+    // Modulation 2
+    ui->knobs.push_back({col1, start_y + spacing, knob_radius, 29, 0.0f, 0.0f, 12.0f, 0.0f, "Source", false, 0, 0});
+    ui->knobs.push_back({col2, start_y + spacing, knob_radius, 30, 0.0f, 0.0f, 26.0f, 0.0f, "Target", false, 0, 0});
+    ui->knobs.push_back({col3, start_y + spacing, knob_radius, 31, 0.0f, -1.0f, 1.0f, 0.0f, "Amount", false, 0, 0});
+    ui->knobs.push_back({col4, start_y + spacing, knob_radius, 32, 0.0f, -2.0f, 2.0f, 0.0f, "Detune", false, 0, 0});
+    
+    // Modulation 3
+    ui->knobs.push_back({col1, start_y + spacing*2, knob_radius, 33, 0.0f, 0.0f, 12.0f, 0.0f, "Source", false, 0, 0});
+    ui->knobs.push_back({col2, start_y + spacing*2, knob_radius, 34, 0.0f, 0.0f, 26.0f, 0.0f, "Target", false, 0, 0});
+    ui->knobs.push_back({col3, start_y + spacing*2, knob_radius, 35, 0.0f, -1.0f, 1.0f, 0.0f, "Amount", false, 0, 0});
+    ui->knobs.push_back({col4, start_y + spacing*2, knob_radius, 36, 0.0f, -2.0f, 2.0f, 0.0f, "Detune", false, 0, 0});
+}
+
+void InitializeFilter1Controls(MutatedUI* ui) {
+    ui->knobs.clear();
+    ui->sliders.clear();
+    ui->dropdowns.clear();
+    
+    float start_y = 200.0f;
+    float knob_radius = 45.0f;
+    
+    ui->knobs.push_back({250, start_y, knob_radius, 37, 0.0f, 0.0f, 6.0f, 0.0f, "Type", false, 0, 0});
+    ui->knobs.push_back({450, start_y, knob_radius, 38, 0.0f, 0.0f, 3.0f, 0.0f, "Routing", false, 0, 0});
+    ui->knobs.push_back({650, start_y, knob_radius, 39, 1000.0f, 20.0f, 20000.0f, 1000.0f, "Cutoff", false, 0, 0});
+    ui->knobs.push_back({850, start_y, knob_radius, 40, 0.5f, 0.0f, 1.0f, 0.5f, "Resonance", false, 0, 0});
+}
+
+void InitializeFilter2Controls(MutatedUI* ui) {
+    ui->knobs.clear();
+    ui->sliders.clear();
+    ui->dropdowns.clear();
+    
+    float start_y = 200.0f;
+    float knob_radius = 45.0f;
+    
+    ui->knobs.push_back({250, start_y, knob_radius, 41, 0.0f, 0.0f, 6.0f, 0.0f, "Type", false, 0, 0});
+    ui->knobs.push_back({450, start_y, knob_radius, 42, 0.0f, 0.0f, 3.0f, 0.0f, "Routing", false, 0, 0});
+    ui->knobs.push_back({650, start_y, knob_radius, 43, 1000.0f, 20.0f, 20000.0f, 1000.0f, "Cutoff", false, 0, 0});
+    ui->knobs.push_back({850, start_y, knob_radius, 44, 0.5f, 0.0f, 1.0f, 0.5f, "Resonance", false, 0, 0});
+}
+
+void Render(MutatedUI* ui) {
+    glClearColor(Colors::Background[0], Colors::Background[1], Colors::Background[2], 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    // Set up 2D orthographic projection
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, ui->width, ui->height, 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    
+    // Draw tabs
+    for (const auto& tab : ui->tabs) {
+        DrawTab(tab, tab.tab == ui->current_tab);
+    }
+    
+    // Draw panel background
+    DrawRect(0, 45, ui->width, ui->height - 45, Colors::Panel);
+    
+    // Draw controls based on current tab
+    for (const auto& knob : ui->knobs) {
+        bool hovered = sqrt(pow(ui->mouse_x - knob.x, 2) + pow(ui->mouse_y - knob.y, 2)) <= knob.radius;
+        DrawKnob(knob, hovered);
+    }
+    
+    for (const auto& slider : ui->sliders) {
+        bool hovered = ui->mouse_x >= slider.x && ui->mouse_x <= slider.x + slider.w &&
+                       ui->mouse_y >= slider.y && ui->mouse_y <= slider.y + slider.h;
+        DrawSlider(slider, hovered);
+    }
+    
+    for (const auto& dropdown : ui->dropdowns) {
+        bool hovered = ui->mouse_x >= dropdown.x && ui->mouse_x <= dropdown.x + dropdown.w &&
+                       ui->mouse_y >= dropdown.y && ui->mouse_y <= dropdown.y + dropdown.h;
+        DrawDropdown(dropdown, hovered);
+    }
+}
+
+void HandleMouseButton(MutatedUI* ui, int button, bool press, int x, int y) {
+    ui->mouse_x = x;
+    ui->mouse_y = y;
+    
+    if (button == 1) {  // Left button
+        ui->mouse_down = press;
+        
+        if (press) {
+            // Check tabs
+            for (auto& tab : ui->tabs) {
+                if (ui->mouse_x >= tab.x && ui->mouse_x <= tab.x + tab.w &&
+                    ui->mouse_y >= tab.y && ui->mouse_y <= tab.y + tab.h) {
+                    ui->current_tab = tab.tab;
+                    
+                    // Load controls for new tab
+                    if (ui->current_tab == TAB_BRAIDS) {
+                        InitializeBraidsControls(ui);
+                    } else if (ui->current_tab == TAB_MODULATION) {
+                        InitializeModulationControls(ui);
+                    } else if (ui->current_tab == TAB_FILTER1) {
+                        InitializeFilter1Controls(ui);
+                    } else if (ui->current_tab == TAB_FILTER2) {
+                        InitializeFilter2Controls(ui);
+                    } else if (ui->current_tab == TAB_REVERB) {
+                        InitializeReverbControls(ui);
+                    }
+                    break;
+                }
+            }
+            
+            // Check knobs
+            for (auto& knob : ui->knobs) {
+                float dist = sqrt(pow(ui->mouse_x - knob.x, 2) + pow(ui->mouse_y - knob.y, 2));
+                if (dist <= knob.radius) {
+                    knob.dragging = true;
+                    knob.drag_start_y = ui->mouse_y;
+                    knob.drag_start_value = knob.value;
+                    break;
+                }
+            }
+            
+            // Check sliders
+            for (auto& slider : ui->sliders) {
+                if (ui->mouse_x >= slider.x && ui->mouse_x <= slider.x + slider.w &&
+                    ui->mouse_y >= slider.y && ui->mouse_y <= slider.y + slider.h) {
+                    slider.dragging = true;
+                    break;
+                }
+            }
+            
+            // Check dropdowns
+            for (auto& dropdown : ui->dropdowns) {
+                if (ui->mouse_x >= dropdown.x && ui->mouse_x <= dropdown.x + dropdown.w &&
+                    ui->mouse_y >= dropdown.y && ui->mouse_y <= dropdown.y + dropdown.h) {
+                    // Toggle dropdown expansion
+                    dropdown.expanded = !dropdown.expanded;
+                    break;
+                } else if (dropdown.expanded) {
+                    // Check if clicking on menu items
+                    float menu_h = dropdown.labels.size() * 20.0f;
+                    if (ui->mouse_x >= dropdown.x && ui->mouse_x <= dropdown.x + dropdown.w &&
+                        ui->mouse_y >= dropdown.y + dropdown.h && 
+                        ui->mouse_y <= dropdown.y + dropdown.h + menu_h) {
+                        // Calculate which item was clicked
+                        int item = (ui->mouse_y - (dropdown.y + dropdown.h)) / 20.0f;
+                        if (item >= 0 && item < dropdown.labels.size()) {
+                            dropdown.value = item;
+                            dropdown.expanded = false;
+                            
+                            // Send to plugin
+                            float value = (float)(item + dropdown.min);
+                            if (ui->write) {
+                                ui->write(ui->controller, dropdown.port, sizeof(float), 0, &value);
+                            }
+                        }
+                        break;
+                    } else {
+                        // Click outside - close dropdown
+                        dropdown.expanded = false;
+                    }
+                }
+            }
+        } else {
+            // Release all drags
+            for (auto& knob : ui->knobs) knob.dragging = false;
+            for (auto& slider : ui->sliders) slider.dragging = false;
+        }
+    }
+}
+
+void HandleMouseMotion(MutatedUI* ui, int x, int y) {
+    ui->mouse_x = x;
+    ui->mouse_y = y;
+    
+    // Update tab hover states
+    for (auto& tab : ui->tabs) {
+        tab.hovered = (x >= tab.x && x <= tab.x + tab.w &&
+                       y >= tab.y && y <= tab.y + tab.h);
+    }
+    
+    // Handle knob dragging
+    for (auto& knob : ui->knobs) {
+        if (knob.dragging) {
+            float delta = (knob.drag_start_y - y) * 0.005f;
+            knob.value = knob.drag_start_value + delta * (knob.max - knob.min);
+            knob.value = fmax(knob.min, fmin(knob.max, knob.value));
+            
+            // Send to plugin
+            if (ui->write) {
+                ui->write(ui->controller, knob.port, sizeof(float), 0, &knob.value);
+            }
+        }
+    }
+    
+    // Handle slider dragging
+    for (auto& slider : ui->sliders) {
+        if (slider.dragging) {
+            float ratio = (x - slider.x) / slider.w;
+            ratio = fmax(0.0f, fmin(1.0f, ratio));
+            slider.value = slider.min + ratio * (slider.max - slider.min);
+            
+            // Send to plugin
+            if (ui->write) {
+                ui->write(ui->controller, slider.port, sizeof(float), 0, &slider.value);
+            }
+        }
+    }
+    
+    // Update dropdown hover states
+    for (auto& dropdown : ui->dropdowns) {
+        if (dropdown.expanded) {
+            float menu_h = dropdown.labels.size() * 20.0f;
+            if (x >= dropdown.x && x <= dropdown.x + dropdown.w &&
+                y >= dropdown.y + dropdown.h && y <= dropdown.y + dropdown.h + menu_h) {
+                dropdown.hover_item = (y - (dropdown.y + dropdown.h)) / 20.0f;
+            } else {
+                dropdown.hover_item = -1;
+            }
+        }
+    }
+}
+
+// LV2 UI interface
+static LV2UI_Handle
+instantiate(const LV2UI_Descriptor* descriptor,
+            const char* plugin_uri,
+            const char* bundle_path,
+            LV2UI_Write_Function write_function,
+            LV2UI_Controller controller,
+            LV2UI_Widget* widget,
+            const LV2_Feature* const* features)
+{
+    fprintf(stderr, "Mutated UI: instantiate called\n");
+    
+    MutatedUI* ui = new MutatedUI();
+    ui->write = write_function;
+    ui->controller = controller;
+    ui->width = 1200;
+    ui->height = 700;
+    ui->current_tab = TAB_BRAIDS;
+    ui->mouse_down = false;
+    ui->display = nullptr;
+    ui->parent = 0;
+    ui->window = 0;
+    ui->gl_context = nullptr;
+    
+    // Find parent window from features
+    for (int i = 0; features[i]; i++) {
+        fprintf(stderr, "Mutated UI: feature %d = %s\n", i, features[i]->URI);
+        if (!strcmp(features[i]->URI, LV2_UI__parent)) {
+            ui->parent = (Window)features[i]->data;
+            fprintf(stderr, "Mutated UI: parent window = %lu\n", (unsigned long)ui->parent);
+        }
+    }
+    
+    if (!ui->parent) {
+        fprintf(stderr, "Mutated UI: ERROR - no parent window found!\n");
+        delete ui;
+        return nullptr;
+    }
+    
+    // Open X11 display
+    ui->display = XOpenDisplay(nullptr);
+    if (!ui->display) {
+        fprintf(stderr, "Mutated UI: ERROR - failed to open X11 display\n");
+        delete ui;
+        return nullptr;
+    }
+    fprintf(stderr, "Mutated UI: X11 display opened\n");
+    
+    // Create X11 window as child of parent
+    XSetWindowAttributes attr;
+    attr.event_mask = ExposureMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask;
+    attr.background_pixel = 0;
+    attr.border_pixel = 0;
+    
+    ui->window = XCreateWindow(
+        ui->display, ui->parent,
+        0, 0, ui->width, ui->height,
+        0, CopyFromParent, InputOutput, CopyFromParent,
+        CWEventMask | CWBackPixel | CWBorderPixel, &attr
+    );
+    
+    if (!ui->window) {
+        fprintf(stderr, "Mutated UI: ERROR - failed to create X11 window\n");
+        XCloseDisplay(ui->display);
+        delete ui;
+        return nullptr;
+    }
+    fprintf(stderr, "Mutated UI: X11 window created: %lu\n", (unsigned long)ui->window);
+    
+    // Create OpenGL context
+    int visual_attribs[] = {
+        GLX_RGBA,
+        GLX_DEPTH_SIZE, 24,
+        GLX_DOUBLEBUFFER,
+        None
+    };
+    
+    XVisualInfo* vi = glXChooseVisual(ui->display, DefaultScreen(ui->display), visual_attribs);
+    if (!vi) {
+        XDestroyWindow(ui->display, ui->window);
+        XCloseDisplay(ui->display);
+        delete ui;
+        return nullptr;
+    }
+    
+    ui->gl_context = glXCreateContext(ui->display, vi, nullptr, GL_TRUE);
+    XFree(vi);
+    
+    if (!ui->gl_context) {
+        XDestroyWindow(ui->display, ui->window);
+        XCloseDisplay(ui->display);
+        delete ui;
+        return nullptr;
+    }
+    
+    glXMakeCurrent(ui->display, ui->window, ui->gl_context);
+    XMapWindow(ui->display, ui->window);
+    XFlush(ui->display);
+    
+    fprintf(stderr, "Mutated UI: OpenGL context created and window mapped\n");
+    
+    // Initialize UI elements
+    InitializeTabs(ui);
+    InitializeBraidsControls(ui);
+    
+    *widget = (LV2UI_Widget)(uintptr_t)ui->window;
+    fprintf(stderr, "Mutated UI: instantiate complete, returning window ID: %lu\n", (unsigned long)ui->window);
+    return ui;
+}
+
+static void
+cleanup(LV2UI_Handle handle)
+{
+    MutatedUI* ui = (MutatedUI*)handle;
+    if (ui->gl_context) {
+        glXMakeCurrent(ui->display, None, nullptr);
+        glXDestroyContext(ui->display, ui->gl_context);
+    }
+    if (ui->window) {
+        XDestroyWindow(ui->display, ui->window);
+    }
+    if (ui->display) {
+        XCloseDisplay(ui->display);
+    }
+    delete ui;
+}
+
+static void
+port_event(LV2UI_Handle handle,
+           uint32_t port_index,
+           uint32_t buffer_size,
+           uint32_t format,
+           const void* buffer)
+{
+    MutatedUI* ui = (MutatedUI*)handle;
+    
+    if (format == 0) {  // Float
+        float value = *(const float*)buffer;
+        
+        // Update knob values
+        for (auto& knob : ui->knobs) {
+            if (knob.port == port_index) {
+                knob.value = value;
+                break;
+            }
+        }
+        
+        // Update slider values
+        for (auto& slider : ui->sliders) {
+            if (slider.port == port_index) {
+                slider.value = value;
+                break;
+            }
+        }
+        
+        // Update dropdown values
+        for (auto& dropdown : ui->dropdowns) {
+            if (dropdown.port == port_index) {
+                dropdown.value = (int)value - dropdown.min;
+                break;
+            }
+        }
+    }
+}
+
+static int
+idle(LV2UI_Handle handle)
+{
+    MutatedUI* ui = (MutatedUI*)handle;
+    
+    // Process X11 events
+    while (XPending(ui->display)) {
+        XEvent event;
+        XNextEvent(ui->display, &event);
+        
+        switch (event.type) {
+            case Expose:
+                break;
+            case ButtonPress:
+                HandleMouseButton(ui, event.xbutton.button, true, event.xbutton.x, event.xbutton.y);
+                break;
+            case ButtonRelease:
+                HandleMouseButton(ui, event.xbutton.button, false, event.xbutton.x, event.xbutton.y);
+                break;
+            case MotionNotify:
+                HandleMouseMotion(ui, event.xmotion.x, event.xmotion.y);
+                break;
+        }
+    }
+    
+    // Render
+    glXMakeCurrent(ui->display, ui->window, ui->gl_context);
+    Render(ui);
+    glXSwapBuffers(ui->display, ui->window);
+    
+    return 0;
+}
+
+static const LV2UI_Idle_Interface idle_interface = {idle};
+
+static const void*
+extension_data(const char* uri)
+{
+    if (!strcmp(uri, LV2_UI__idleInterface)) {
+        return &idle_interface;
+    }
+    return nullptr;
+}
+
+static const LV2UI_Descriptor descriptor = {
+    MUTATED_UI_URI,
+    instantiate,
+    cleanup,
+    port_event,
+    extension_data
+};
+
+LV2_SYMBOL_EXPORT
+const LV2UI_Descriptor*
+lv2ui_descriptor(uint32_t index)
+{
+    return index == 0 ? &descriptor : nullptr;
+}
+

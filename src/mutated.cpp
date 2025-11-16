@@ -1,0 +1,2404 @@
+/*
+ * Mutated Instruments LV2 Plugin
+ * Dual Oscillator (Braids + Plaits) with Modulation Matrix, Filters, and Reverb
+ * 
+ * Copyright (C) 2025 zynMI Project
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * 
+ * ============================================================================
+ * 
+ * This plugin combines multiple Mutable Instruments modules:
+ * 
+ * - Braids macro oscillator
+ *   Copyright 2012 Émilie Gillet (emilie.o.gillet@gmail.com)
+ * 
+ * - Plaits macro oscillator
+ *   Copyright 2016 Émilie Gillet (emilie.o.gillet@gmail.com)
+ * 
+ * All Mutable Instruments DSP code is licensed under the MIT License.
+ * We gratefully acknowledge Émilie Gillet and Mutable Instruments for
+ * their incredible contributions to open-source synthesizer design.
+ * 
+ * - Nepenthe Reverb Algorithm (NepentheReverb class):
+ *   Original implementation by Dario Sanfilippo
+ *   https://github.com/dariosanfilippo/nepenthe
+ *   Licensed under GPL v3
+ *   Adapted for LV2 by zynMI Project
+ * 
+ * The modulation matrix, filter implementations, and LFO system are
+ * original work by the zynMI Project.
+ * 
+ * Filter implementations include classic designs:
+ * - Moog Ladder Filter
+ * - MS-20 Filter
+ * - TB-303 Filter
+ * - SEM Filter
+ * - Sallen-Key Filter
+ * - Diode Ladder Filter
+ * - Oberheim Filter
+ * 
+ * For more information about Mutable Instruments:
+ * https://mutable-instruments.net/
+ */
+
+#include <lv2/lv2plug.in/ns/lv2core/lv2.h>
+#include <lv2/lv2plug.in/ns/ext/atom/atom.h>
+#include <lv2/lv2plug.in/ns/ext/atom/util.h>
+#include <lv2/lv2plug.in/ns/ext/midi/midi.h>
+#include <lv2/lv2plug.in/ns/ext/urid/urid.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <vector>
+
+// Simple ADSR Envelope
+class SimpleADSR {
+public:
+    enum Stage {
+        STAGE_OFF,
+        STAGE_ATTACK,
+        STAGE_DECAY,
+        STAGE_SUSTAIN,
+        STAGE_RELEASE
+    };
+
+    SimpleADSR() : stage_(STAGE_OFF), value_(0.0f), sample_rate_(48000.0f),
+                   attack_time_(0.01f), decay_time_(0.1f), sustain_level_(0.7f), release_time_(0.3f) {}
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        stage_ = STAGE_OFF;
+        value_ = 0.0f;
+    }
+
+    void SetParameters(float attack, float decay, float sustain, float release) {
+        attack_time_ = attack;
+        decay_time_ = decay;
+        // Clamp sustain to 0-1 range to prevent negative decay_delta
+        sustain_level_ = (sustain < 0.0f) ? 0.0f : (sustain > 1.0f) ? 1.0f : sustain;
+        release_time_ = release;
+    }
+
+    void Trigger() {
+        stage_ = STAGE_ATTACK;
+    }
+
+    void Release() {
+        if (stage_ != STAGE_OFF) {
+            stage_ = STAGE_RELEASE;
+        }
+    }
+
+    float Process() {
+        switch (stage_) {
+            case STAGE_OFF:
+                value_ = 0.0f;
+                break;
+
+            case STAGE_ATTACK:
+                if (attack_time_ < 0.001f) {
+                    value_ = 1.0f;
+                    stage_ = STAGE_DECAY;
+                } else {
+                    float attack_delta = 1.0f / (attack_time_ * sample_rate_);
+                    value_ += attack_delta;
+                    if (value_ >= 1.0f) {
+                        value_ = 1.0f;
+                        stage_ = STAGE_DECAY;
+                    }
+                }
+                break;
+
+            case STAGE_DECAY:
+                if (decay_time_ < 0.001f) {
+                    value_ = sustain_level_;
+                    stage_ = STAGE_SUSTAIN;
+                } else {
+                    float decay_delta = (1.0f - sustain_level_) / (decay_time_ * sample_rate_);
+                    value_ -= decay_delta;
+                    if (value_ <= sustain_level_) {
+                        value_ = sustain_level_;
+                        stage_ = STAGE_SUSTAIN;
+                    }
+                }
+                break;
+
+            case STAGE_SUSTAIN:
+                value_ = sustain_level_;
+                break;
+
+            case STAGE_RELEASE:
+                if (release_time_ < 0.001f) {
+                    value_ = 0.0f;
+                    stage_ = STAGE_OFF;
+                } else {
+                    float release_delta = value_ / (release_time_ * sample_rate_);
+                    value_ -= release_delta;
+                    if (value_ <= 0.0001f) {
+                        value_ = 0.0f;
+                        stage_ = STAGE_OFF;
+                    }
+                }
+                break;
+        }
+
+        // Hard gate at threshold
+        if (value_ < 0.0001f) {
+            value_ = 0.0f;
+        }
+
+        return value_;
+    }
+
+    bool IsActive() const {
+        return stage_ != STAGE_OFF;
+    }
+
+    Stage GetStage() const {
+        return stage_;
+    }
+
+    float GetValue() const {
+        return value_;
+    }
+
+private:
+    Stage stage_;
+    float value_;
+    float sample_rate_;
+    float attack_time_;
+    float decay_time_;
+    float sustain_level_;
+    float release_time_;
+};
+
+// Moog-style ladder filter (4-pole lowpass)
+// Improved version with better stability and thermal modeling
+class MoogFilter {
+public:
+    MoogFilter() : sample_rate_(48000.0f) {
+        Reset();
+    }
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        Reset();
+    }
+
+    void Reset() {
+        for (int i = 0; i < 4; i++) {
+            stage_[i] = 0.0f;
+            stage_tanh_[i] = 0.0f;
+        }
+    }
+
+    // Fast tanh approximation for thermal modeling
+    inline float FastTanh(float x) {
+        float x2 = x * x;
+        float x3 = x2 * x;
+        float x5 = x3 * x2;
+        return x - (x3 / 3.0f) + (x5 / 5.0f);
+    }
+
+    // Denormal protection
+    inline float Undenormalize(float x) {
+        if (fabs(x) < 1e-10f) return 0.0f;
+        return x;
+    }
+
+    float Process(float input, float cutoff, float resonance) {
+        // Cutoff: 0-1 (maps to ~20Hz - 20kHz)
+        // Resonance: 0-1 (0 = no resonance, 1 = self-oscillation)
+        
+        // Improved cutoff mapping with better low-frequency response
+        float fc = cutoff * cutoff * 0.5f;
+        fc = fmin(fc, 0.499f);  // Prevent instability
+        
+        // Resonance with better scaling - reduced maximum to prevent pure oscillation
+        float res = resonance * resonance * 3.5f;  // Squared for more control, max 3.5
+        
+        // Thermal compensation (Moog ladder thermal feedback)
+        float thermal_feedback = stage_tanh_[3];
+        
+        // Limit feedback to prevent runaway oscillation
+        thermal_feedback = fmax(-0.95f, fmin(0.95f, thermal_feedback));
+        
+        input = FastTanh(input - res * thermal_feedback);
+        
+        // 4 cascaded one-pole filters with thermal modeling
+        for (int i = 0; i < 4; i++) {
+            // One-pole lowpass with oversampling compensation
+            stage_[i] = stage_[i] + fc * (((i == 0) ? input : stage_tanh_[i-1]) - stage_[i]);
+            stage_[i] = Undenormalize(stage_[i]);
+            stage_tanh_[i] = FastTanh(stage_[i]);
+        }
+        
+        return stage_[3];
+    }
+
+private:
+    float sample_rate_;
+    float stage_[4];
+    float stage_tanh_[4];
+};
+
+// MS-20 style filter (2-pole with overdrive)
+// Improved version with better stability
+class MS20Filter {
+public:
+    MS20Filter() : sample_rate_(48000.0f) {
+        Reset();
+    }
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        Reset();
+    }
+
+    void Reset() {
+        lp_ = bp_ = 0.0f;
+        delay_ = 0.0f;
+    }
+
+    // Denormal protection
+    inline float Undenormalize(float x) {
+        if (fabs(x) < 1e-10f) return 0.0f;
+        return x;
+    }
+
+    float Process(float input, float cutoff, float resonance) {
+        // MS-20 has aggressive character
+        cutoff = fmin(cutoff * cutoff * 0.5f, 0.499f);
+        float res = resonance * resonance * 1.5f;  // Squared for better control, reduced max
+        
+        // Soft clipping on input for MS-20 character
+        input = tanh(input * 1.2f) * 0.9f;
+        
+        // Improved state variable filter with better stability
+        float q = fmax(0.5f, 1.0f - cutoff * 0.7f);
+        float f = cutoff * 1.5f;
+        
+        // Resonance feedback with limiting
+        float fb = Undenormalize(delay_) * res;
+        fb = fmax(-1.5f, fmin(1.5f, fb));  // Tighter clamp to prevent oscillation
+        
+        // State variable core
+        lp_ = Undenormalize(lp_ + f * bp_);
+        float hp = input - lp_ - q * bp_ - fb;
+        bp_ = Undenormalize(bp_ + f * hp);
+        
+        // Store delayed feedback sample with soft limiting
+        delay_ = tanh(bp_ * 0.9f);
+        
+        // Output with slight saturation
+        float output = lp_ + bp_ * 0.3f;
+        return tanh(output * 0.8f);
+    }
+
+private:
+    float sample_rate_;
+    float lp_, bp_;
+    float delay_;
+};
+
+// TB-303 style filter (resonant lowpass with characteristic sound)
+// Improved version with diode ladder emulation
+class TB303Filter {
+public:
+    TB303Filter() : sample_rate_(48000.0f) {
+        Reset();
+    }
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        Reset();
+    }
+
+    void Reset() {
+        lp_ = bp_ = hp_ = 0.0f;
+    }
+
+    // Denormal protection
+    inline float Undenormalize(float x) {
+        if (fabs(x) < 1e-10f) return 0.0f;
+        return x;
+    }
+
+    float Process(float input, float cutoff, float resonance) {
+        // 303 filter is less steep but very resonant
+        cutoff = fmin(cutoff * cutoff * 0.55f, 0.499f);
+        float res = resonance * resonance * 1.8f;  // Squared for better control, reduced max
+        
+        // 303-style input gain and saturation
+        input = tanh(input * 1.5f) * 0.8f;
+        
+        // Improved state variable filter with better Q control
+        float q = fmax(0.3f, 1.0f - cutoff * 0.8f);
+        float f = cutoff * 1.8f;
+        
+        // Add resonance feedback with soft limiting
+        float fb = Undenormalize(bp_) * res;
+        fb = tanh(fb * 0.4f) * 1.5f;  // Tighter soft limit to prevent oscillation
+        
+        // State variable filter equations
+        hp_ = input - lp_ - q * bp_ - fb;
+        bp_ = Undenormalize(bp_ + f * hp_);
+        lp_ = Undenormalize(lp_ + f * bp_);
+        
+        // 303 characteristic: mix lowpass with some bandpass
+        float output = lp_ + bp_ * 0.4f;
+        
+        // Final 303-style saturation
+        return tanh(output * 0.9f);
+    }
+
+private:
+    float sample_rate_;
+    float lp_, bp_, hp_;
+};
+
+// SEM-style state variable filter (multimode with LP/BP/HP)
+class SEMFilter {
+public:
+    SEMFilter() : sample_rate_(48000.0f) {
+        Reset();
+    }
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        Reset();
+    }
+
+    void Reset() {
+        lp_ = bp_ = 0.0f;
+        z1_ = z2_ = 0.0f;
+    }
+
+    inline float Undenormalize(float x) {
+        if (fabs(x) < 1e-10f) return 0.0f;
+        return x;
+    }
+
+    float Process(float input, float cutoff, float resonance) {
+        // SEM-style multimode filter
+        cutoff = fmin(cutoff * cutoff * 0.48f, 0.499f);
+        float res = resonance * resonance * 2.0f;  // Squared, reduced max
+        
+        // Pre-gain for character
+        input = tanh(input * 1.1f) * 0.95f;
+        
+        // State variable with proper damping
+        float f = cutoff * 2.0f;
+        float damp = fmin(2.0f * (1.0f - pow(resonance, 0.25f)), fmin(2.0f, 2.0f / f - f * 0.5f));
+        
+        // Filter core with resonance feedback
+        float notch = input - damp * bp_;
+        lp_ = Undenormalize(lp_ + f * bp_);
+        float hp = notch - lp_;
+        bp_ = Undenormalize(f * hp + bp_);
+        
+        // Add resonance with tighter control
+        bp_ += res * bp_ * 0.08f;  // Reduced from 0.1
+        bp_ = tanh(bp_ * 0.9f);  // Tighter soft limit
+        
+        // Multimode mix: mostly LP with some BP for character
+        return lp_ * 0.8f + bp_ * 0.2f;
+    }
+
+private:
+    float sample_rate_;
+    float lp_, bp_;
+    float z1_, z2_;
+};
+
+// Sallen-Key style filter (2-pole Butterworth topology)
+class SallenKeyFilter {
+public:
+    SallenKeyFilter() : sample_rate_(48000.0f) {
+        Reset();
+    }
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        Reset();
+    }
+
+    void Reset() {
+        z1_ = z2_ = 0.0f;
+        y1_ = y2_ = 0.0f;
+    }
+
+    inline float Undenormalize(float x) {
+        if (fabs(x) < 1e-10f) return 0.0f;
+        return x;
+    }
+
+    float Process(float input, float cutoff, float resonance) {
+        // Sallen-Key topology (smooth 2-pole response)
+        cutoff = fmin(cutoff * cutoff * 0.45f, 0.499f);
+        
+        // Calculate filter coefficients with limited Q to prevent oscillation
+        float wd = cutoff * M_PI;
+        float wa = tan(wd);
+        float g = wa * wa;
+        float Q = 0.5f + resonance * resonance * 3.0f;  // Squared resonance, max Q = 3.5
+        Q = fmin(Q, 3.5f);  // Hard limit Q factor
+        float r = 1.0f / Q;
+        
+        float a0 = 1.0f + r * wa + g;
+        float a1 = 2.0f * (g - 1.0f);
+        float a2 = 1.0f - r * wa + g;
+        float b0 = g / a0;
+        float b1 = 2.0f * b0;
+        float b2 = b0;
+        
+        // Normalize coefficients
+        a1 /= a0;
+        a2 /= a0;
+        
+        // Biquad filter implementation
+        float output = b0 * input + b1 * z1_ + b2 * z2_ - a1 * y1_ - a2 * y2_;
+        output = Undenormalize(output);
+        
+        // Clamp output to prevent instability
+        output = fmax(-2.0f, fmin(2.0f, output));
+        
+        // Update state
+        z2_ = z1_;
+        z1_ = input;
+        y2_ = y1_;
+        y1_ = output;
+        
+        // Soft limiting for stability
+        return tanh(output * 0.8f);
+    }
+
+private:
+    float sample_rate_;
+    float z1_, z2_;  // Input delays
+    float y1_, y2_;  // Output delays
+};
+
+// Diode ladder filter (inspired by EMS VCS3 / Steiner-Parker)
+class DiodeLadderFilter {
+public:
+    DiodeLadderFilter() : sample_rate_(48000.0f) {
+        Reset();
+    }
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        Reset();
+    }
+
+    void Reset() {
+        for (int i = 0; i < 4; i++) {
+            stage_[i] = 0.0f;
+        }
+        feedback_ = 0.0f;
+    }
+
+    inline float Undenormalize(float x) {
+        if (fabs(x) < 1e-10f) return 0.0f;
+        return x;
+    }
+
+    // Diode pair simulation
+    inline float DiodePair(float x) {
+        // Simplified diode characteristics
+        if (x > 0.0f) {
+            return tanh(x * 2.0f) * 0.5f;
+        } else {
+            return tanh(x * 2.0f) * 0.5f;
+        }
+    }
+
+    float Process(float input, float cutoff, float resonance) {
+        // Diode ladder has unique saturation characteristics
+        cutoff = fmin(cutoff * cutoff * 0.52f, 0.499f);
+        float res = resonance * resonance * 3.2f;  // Squared, reduced max
+        
+        // Input stage with diode-like saturation
+        input = DiodePair(input);
+        
+        // Calculate feedback with tighter limiting
+        float fb = feedback_ * res;
+        fb = tanh(fb * 0.45f);  // Tighter soft limit to prevent oscillation
+        
+        // Apply feedback
+        input -= fb;
+        
+        // 4-stage cascade with diode-like nonlinearity per stage
+        float fc = cutoff * 1.3f;
+        for (int i = 0; i < 4; i++) {
+            float input_stage = (i == 0) ? input : stage_[i-1];
+            stage_[i] = Undenormalize(stage_[i] + fc * (input_stage - stage_[i]));
+            // Apply diode-like saturation per stage with reduced gain
+            stage_[i] = DiodePair(stage_[i] * 1.0f);  // Reduced from 1.2
+        }
+        
+        // Store feedback with limiting
+        feedback_ = tanh(stage_[3] * 0.9f);
+        
+        return stage_[3];
+    }
+
+private:
+    float sample_rate_;
+    float stage_[4];
+    float feedback_;
+};
+
+// Oberheim SEM-style 12dB multimode filter
+class OberheimFilter {
+public:
+    OberheimFilter() : sample_rate_(48000.0f) {
+        Reset();
+    }
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        Reset();
+    }
+
+    void Reset() {
+        lp1_ = lp2_ = 0.0f;
+        bp1_ = bp2_ = 0.0f;
+        hp1_ = hp2_ = 0.0f;
+    }
+
+    inline float Undenormalize(float x) {
+        if (fabs(x) < 1e-10f) return 0.0f;
+        return x;
+    }
+
+    float Process(float input, float cutoff, float resonance) {
+        // Oberheim multimode character
+        cutoff = fmin(cutoff * cutoff * 0.46f, 0.499f);
+        float res = resonance * resonance * 2.2f;  // Squared, reduced max
+        
+        // Input conditioning
+        input = tanh(input * 1.15f) * 0.9f;
+        
+        // Two cascaded state variable sections
+        float f = cutoff * 1.4f;
+        float q = 1.0f - cutoff * 0.7f;
+        q = fmax(0.4f, q);
+        
+        // First stage
+        lp1_ = Undenormalize(lp1_ + f * bp1_);
+        hp1_ = input - lp1_ - q * bp1_;
+        bp1_ = Undenormalize(bp1_ + f * hp1_);
+        
+        // Second stage with resonance and tighter limiting
+        float fb = lp2_ * res;
+        fb = tanh(fb * 0.4f);  // Tighter soft limit
+        
+        lp2_ = Undenormalize(lp2_ + f * bp2_);
+        hp2_ = bp1_ - lp2_ - q * bp2_ - fb;
+        bp2_ = Undenormalize(bp2_ + f * hp2_);
+        
+        // Soft limit internal states
+        bp2_ = tanh(bp2_ * 0.95f);
+        
+        // Output mix (LP heavy with BP character)
+        return lp2_ * 0.85f + bp2_ * 0.15f;
+    }
+
+private:
+    float sample_rate_;
+    float lp1_, lp2_;
+    float bp1_, bp2_;
+    float hp1_, hp2_;
+};
+
+// ============================================================================
+// Nepenthe Reverb - Velvet noise based reverb algorithm
+// 
+// Original implementation by Dario Sanfilippo
+// https://github.com/dariosanfilippo/nepenthe
+// Licensed under GPL v3
+//
+// This is a standalone C++11 adaptation for LV2, based on the original
+// JUCE plugin. The core algorithm uses velvet noise (sparse random impulses)
+// to create realistic reverb with low computational cost.
+//
+// Reference files are kept in src/nepenthe_reference/ for algorithm details.
+// ============================================================================
+class NepentheReverb {
+public:
+    struct Echo {
+        int position;
+        bool sign;
+        float amplitude;
+    };
+    
+    NepentheReverb() : sample_rate_(48000.0f), data_(nullptr), data_size_(0),
+                       read_pos_(0), feedback_pos_(0), delay_buffer_(nullptr),
+                       delay_size_(0), delay_pos_(0) {}
+    
+    ~NepentheReverb() {
+        if (data_) {
+            delete[] data_;
+        }
+        if (delay_buffer_) {
+            delete[] delay_buffer_;
+        }
+    }
+    
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        
+        // Constants - balanced density for smooth reverb tail
+        echoes_per_channel_ = 1500;
+        loop_seconds_ = 1.0f;
+        // Conservative gain to prevent feedback buildup
+        gain_per_echo_ = 1.5f / sqrtf(echoes_per_channel_);  // Reduced gain
+        max_delay_ms_ = 200;
+        
+        // Modulation for preventing metallic ringing
+        mod_phase_ = 0.0f;
+        mod_rate_ = 0.3f;  // Hz
+        mod_depth_ = 0.0002f;  // Very subtle
+        
+        // Calculate sizes
+        spacing_ = static_cast<int>(roundf(sample_rate_ * loop_seconds_ / echoes_per_channel_));
+        loop_length_ = spacing_ * echoes_per_channel_;
+        loop_capacity_ = loop_length_ * 2;
+        
+        // Allocate circular buffer for reverb (delete old first to prevent leak)
+        if (data_) {
+            delete[] data_;
+            data_ = nullptr;
+        }
+        data_ = new float[loop_capacity_];
+        data_size_ = loop_capacity_;
+        
+        // Allocate delay buffer (max 200ms, stereo)
+        delay_capacity_ = static_cast<int>(0.001f * sample_rate_ * max_delay_ms_) * 2 + 2;
+        if (delay_buffer_) {
+            delete[] delay_buffer_;
+            delay_buffer_ = nullptr;
+        }
+        delay_buffer_ = new float[delay_capacity_];
+        delay_size_ = delay_capacity_;
+        delay_pos_ = 0;
+        
+        // Clear buffers
+        for (int i = 0; i < data_size_; i++) {
+            data_[i] = 0.0f;
+        }
+        for (int i = 0; i < delay_size_; i++) {
+            delay_buffer_[i] = 0.0f;
+        }
+        
+        // Initialize positions
+        read_pos_ = 0;
+        feedback_pos_ = loop_length_;
+        
+        // Generate velvet noise echo patterns for stereo (different seeds for L/R stereo width)
+        GenerateEchoes(echoes_left_, 12345);
+        GenerateEchoes(echoes_right_, 54321);
+        
+        // Default parameters
+        time_ = 2.2f;  // RT60 in seconds
+        feedback_ = GetAmplitude(loop_length_);
+        mix_ = 0.5f;
+        delay_length_ = 0;
+        bass_gain_ = 0.0f;
+        treble_freq_ = 2000.0f;
+        
+        // Initialize filters
+        bass_lp_l_ = 0.0f;
+        bass_lp_r_ = 0.0f;
+        treble_lp_l_ = 0.0f;
+        treble_lp_r_ = 0.0f;
+        
+        // Initialize damping filters for more natural decay
+        damping_l_ = 0.0f;
+        damping_r_ = 0.0f;
+        
+        // Initialize diffusion all-pass filters (4 per channel for dense diffusion)
+        for (int i = 0; i < 4; i++) {
+            ap_z1_l_[i] = 0.0f;
+            ap_z1_r_[i] = 0.0f;
+        }
+        
+        // Calculate filter coefficients
+        UpdateFilters();
+    }
+    
+    void SetParameters(float time, float delay_ms, float bass, float treble, float mix, float size, float diffusion, float modulation, float width, float gain) {
+        time_ = time;
+        mix_ = mix;
+        size_ = 0.5f + size * 1.5f;  // 0.5 to 2.0
+        diffusion_ = diffusion;
+        width_ = width;
+        gain_ = gain;
+        
+        // Modulation depth scaled (0-1 to 0-0.001)
+        mod_depth_ = modulation * 0.001f;
+        
+        // Adjust loop length based on size
+        int target_loop_length = static_cast<int>(loop_length_ * size_);
+        feedback_ = GetAmplitude(target_loop_length);
+        
+        // Delay in samples (stereo pairs)
+        delay_length_ = static_cast<int>(0.001f * sample_rate_ * delay_ms) * 2;
+        if (delay_length_ >= delay_capacity_) {
+            delay_length_ = delay_capacity_ - 2;
+        }
+        
+        // Bass: -1 to +1 mapped to gain adjustment
+        bass_gain_ = bass * 0.02f;  // ±2% gain per unit
+        
+        // Treble: 0 to 1 mapped to 1500Hz - 3500Hz
+        treble_freq_ = 1500.0f + treble * 2000.0f;
+        
+        UpdateFilters();
+        
+        // Update echo amplitudes
+        for (auto& echo : echoes_left_) {
+            echo.amplitude = GetAmplitude(echo.position);
+        }
+        for (auto& echo : echoes_right_) {
+            echo.amplitude = GetAmplitude(echo.position);
+        }
+    }
+    
+    void UpdateFilters() {
+        // Bass filter at 300Hz
+        float bass_freq = 300.0f;
+        bass_k_ = 1.0f - expf(-2.0f * M_PI * bass_freq / sample_rate_);
+        
+        // Treble filter (variable)
+        treble_k_ = 1.0f - expf(-2.0f * M_PI * treble_freq_ / sample_rate_);
+        
+        // Damping filter at 4kHz for natural high-frequency decay
+        float damp_freq = 4000.0f;
+        damping_k_ = 1.0f - expf(-2.0f * M_PI * damp_freq / sample_rate_);
+    }
+    
+    void Process(float input_l, float input_r, float& output_l, float& output_r) {
+        // Update modulation LFO for preventing metallic artifacts
+        mod_phase_ += mod_rate_ / sample_rate_;
+        if (mod_phase_ >= 1.0f) mod_phase_ -= 1.0f;
+        float mod_value = sinf(mod_phase_ * 2.0f * M_PI) * mod_depth_;
+        
+        // Apply pre-delay if enabled
+        float delayed_l = input_l;
+        float delayed_r = input_r;
+        
+        if (delay_length_ > 0) {
+            // Write to delay buffer
+            delay_buffer_[delay_pos_] = input_l;
+            delay_buffer_[delay_pos_ + 1] = input_r;
+            
+            // Read from delay buffer with modulation
+            float mod_offset = mod_value * sample_rate_;
+            int read_delay_pos = delay_pos_ - delay_length_ - static_cast<int>(mod_offset);
+            if (read_delay_pos < 0) read_delay_pos += delay_size_;
+            
+            delayed_l = delay_buffer_[read_delay_pos];
+            delayed_r = delay_buffer_[read_delay_pos + 1];
+            
+            // Advance delay position
+            delay_pos_ += 2;
+            if (delay_pos_ >= delay_size_) delay_pos_ = 0;
+        }
+        
+        // Apply input diffusion with all-pass filters for smoother sound
+        delayed_l = AllPass(delayed_l, 0, 0);
+        delayed_l = AllPass(delayed_l, 1, 0);
+        delayed_r = AllPass(delayed_r, 0, 1);
+        delayed_r = AllPass(delayed_r, 1, 1);
+        
+        // Write echoes for left channel (offset 0)
+        ProcessChannel(delayed_l, echoes_left_, 0);
+        
+        // Write echoes for right channel (offset 1)
+        ProcessChannel(delayed_r, echoes_right_, 1);
+        
+        // Read output and apply feedback for BOTH channels before advancing
+        // Left channel
+        int left_pos = read_pos_;
+        int left_fb_pos = feedback_pos_;
+        output_l = data_[left_pos];
+        data_[left_pos] = 0.0f;
+        
+        // Apply damping to feedback for natural high-frequency decay
+        damping_l_ += damping_k_ * (output_l - damping_l_);
+        float damped_fb_l = damping_l_;
+        data_[left_fb_pos] += damped_fb_l * feedback_;
+        
+        // Advance to next position for right channel
+        if (++read_pos_ == data_size_) read_pos_ = 0;
+        if (++feedback_pos_ == data_size_) feedback_pos_ = 0;
+        
+        // Right channel
+        int right_pos = read_pos_;
+        int right_fb_pos = feedback_pos_;
+        output_r = data_[right_pos];
+        data_[right_pos] = 0.0f;
+        
+        // Apply damping to feedback
+        damping_r_ += damping_k_ * (output_r - damping_r_);
+        float damped_fb_r = damping_r_;
+        data_[right_fb_pos] += damped_fb_r * feedback_;
+        
+        // Advance for next sample
+        if (++read_pos_ == data_size_) read_pos_ = 0;
+        if (++feedback_pos_ == data_size_) feedback_pos_ = 0;
+        
+        // Apply output diffusion for smoother tail (scaled by diffusion parameter)
+        if (diffusion_ > 0.1f) {
+            float diff_amount = diffusion_;
+            output_l = output_l * (1.0f - diff_amount) + AllPass(output_l, 2, 0) * diff_amount;
+            output_l = output_l * (1.0f - diff_amount) + AllPass(output_l, 3, 0) * diff_amount;
+            output_r = output_r * (1.0f - diff_amount) + AllPass(output_r, 2, 1) * diff_amount;
+            output_r = output_r * (1.0f - diff_amount) + AllPass(output_r, 3, 1) * diff_amount;
+        }
+        
+        // Apply EQ (bass boost/cut and treble filter)
+        // Bass: simple gain adjustment with low-shelf
+        bass_lp_l_ += bass_k_ * (output_l - bass_lp_l_);
+        bass_lp_r_ += bass_k_ * (output_r - bass_lp_r_);
+        output_l += bass_lp_l_ * bass_gain_;
+        output_r += bass_lp_r_ * bass_gain_;
+        
+        // Treble: lowpass filter
+        treble_lp_l_ += treble_k_ * (output_l - treble_lp_l_);
+        treble_lp_r_ += treble_k_ * (output_r - treble_lp_r_);
+        output_l = treble_lp_l_;
+        output_r = treble_lp_r_;
+        
+        // Apply stereo width control
+        float mid = (output_l + output_r) * 0.5f;
+        float side = (output_l - output_r) * 0.5f * width_;
+        output_l = mid + side;
+        output_r = mid - side;
+        
+        // Soft clip reverb signal to prevent harsh clipping
+        output_l = SoftClip(output_l);
+        output_r = SoftClip(output_r);
+        
+        // Apply gain with scaling to prevent excessive loudness
+        output_l *= gain_ * 0.3f;
+        output_r *= gain_ * 0.3f;
+        
+        // Apply mix
+        output_l = input_l * (1.0f - mix_) + output_l * mix_;
+        output_r = input_r * (1.0f - mix_) + output_r * mix_;
+        
+        // Final soft clip to prevent any clipping at output
+        output_l = SoftClip(output_l * 0.95f);
+        output_r = SoftClip(output_r * 0.95f);
+    }
+    
+private:
+    // All-pass filter for diffusion (creates dense echo pattern)
+    float AllPass(float input, int index, int channel) {
+        const float g = 0.5f;  // Reduced all-pass coefficient to prevent metallic sound
+        float* z1 = (channel == 0) ? &ap_z1_l_[index] : &ap_z1_r_[index];
+        
+        float output = -g * input + *z1;
+        *z1 = input + g * output;
+        
+        return output;
+    }
+    
+    void GenerateEchoes(std::vector<Echo>& echoes, unsigned int seed) {
+        echoes.clear();
+        echoes.reserve(echoes_per_channel_);
+        
+        for (int i = 0; i < echoes_per_channel_; i++) {
+            Echo echo;
+            echo.position = i * spacing_ + (Rand(seed) % spacing_);
+            echo.sign = (Rand(seed) & 1) == 0;
+            // Include sign in amplitude like original Nepenthe
+            float amp = GetAmplitude(echo.position);
+            echo.amplitude = echo.sign ? amp : -amp;
+            echoes.push_back(echo);
+        }
+    }
+    
+    unsigned int Rand(unsigned int& seed) {
+        seed = seed * 1664525u + 1013904223u;  // Linear congruential generator
+        return seed;
+    }
+    
+    float SoftClip(float x) const {
+        // Soft clipping using tanh approximation
+        if (x > 1.5f) return 1.0f;
+        if (x < -1.5f) return -1.0f;
+        return x * (1.5f - 0.166666f * x * x) / 1.5f;
+    }
+    
+    float GetAmplitude(int position) const {
+        float rt60_position = sample_rate_ * time_;
+        // Reduce amplitude to prevent feedback buildup
+        return powf(0.001f, position / rt60_position) * 0.5f;
+    }
+    
+    void ProcessChannel(float input, const std::vector<Echo>& echoes, int channel_offset) {
+        for (const Echo& echo : echoes) {
+            float gain = gain_per_echo_ * echo.amplitude;  // amplitude already includes sign
+            
+            int pos = read_pos_ + echo.position * 2 + channel_offset;  // *2 for stereo interleave, +offset for L/R
+            if (pos >= data_size_) pos -= data_size_;
+            
+            data_[pos] += gain * input;
+        }
+    }
+    
+    float sample_rate_;
+    float* data_;
+    int data_size_;
+    int read_pos_;
+    int feedback_pos_;
+    
+    // Delay line
+    float* delay_buffer_;
+    int delay_size_;
+    int delay_pos_;
+    int delay_capacity_;
+    int delay_length_;
+    int max_delay_ms_;
+    
+    int echoes_per_channel_;
+    float loop_seconds_;
+    float gain_per_echo_;
+    int spacing_;
+    int loop_length_;
+    int loop_capacity_;
+    
+    std::vector<Echo> echoes_left_;
+    std::vector<Echo> echoes_right_;
+    
+    float time_;
+    float feedback_;
+    float mix_;
+    
+    // EQ parameters
+    float bass_gain_;
+    float treble_freq_;
+    float bass_k_;
+    float treble_k_;
+    
+    // EQ state
+    float bass_lp_l_;
+    float bass_lp_r_;
+    float treble_lp_l_;
+    float treble_lp_r_;
+    
+    // Modulation (for preventing metallic artifacts)
+    float mod_phase_;
+    float mod_rate_;
+    float mod_depth_;
+    
+    // Damping (for natural high-frequency decay)
+    float damping_l_;
+    float damping_r_;
+    float damping_k_;
+    
+    // Diffusion all-pass filters (4 per channel)
+    float ap_z1_l_[4];
+    float ap_z1_r_[4];
+    
+    // Enhanced parameters
+    float size_;
+    float diffusion_;
+    float width_;
+    float gain_;
+};
+
+// LFO with multiple waveforms
+class LFO {
+public:
+    LFO() : sample_rate_(48000.0f), phase_(0.0f), sh_value_(0.0f) {}
+
+    void Init(float sample_rate) {
+        sample_rate_ = sample_rate;
+        phase_ = 0.0f;
+        sh_value_ = 0.0f;
+    }
+
+    void Reset() {
+        phase_ = 0.0f;
+    }
+
+    float Process(float rate, float shape, int waveform) {
+        // Rate: 0-1 (0.01Hz - 20Hz)
+        float freq = 0.01f + rate * 19.99f;
+        float phase_increment = freq / sample_rate_;
+        
+        phase_ += phase_increment;
+        if (phase_ >= 1.0f) {
+            phase_ -= 1.0f;
+        }
+
+        float output = 0.0f;
+        
+        switch (waveform) {
+            case 0: // Sine
+                output = sin(phase_ * 2.0f * M_PI);
+                break;
+                
+            case 1: // Triangle
+                if (phase_ < 0.5f) {
+                    output = -1.0f + 4.0f * phase_;
+                } else {
+                    output = 3.0f - 4.0f * phase_;
+                }
+                break;
+                
+            case 2: // Sawtooth
+                output = -1.0f + 2.0f * phase_;
+                break;
+                
+            case 3: // Reverse Sawtooth
+                output = 1.0f - 2.0f * phase_;
+                break;
+                
+            case 4: { // Square/PWM
+                // Shape controls pulse width (0.1 to 0.9)
+                float pw = 0.1f + shape * 0.8f;
+                output = (phase_ < pw) ? 1.0f : -1.0f;
+                break;
+            }
+                
+            case 5: { // Sample & Hold (random)
+                if (phase_ < phase_increment) {
+                    // New random value at phase wrap
+                    sh_value_ = -1.0f + 2.0f * (rand() / (float)RAND_MAX);
+                }
+                output = sh_value_;
+                break;
+            }
+        }
+        
+        return output;
+    }
+
+    float GetPhase() const {
+        return phase_;
+    }
+
+private:
+    float sample_rate_;
+    float phase_;
+    float sh_value_;  // Sample & hold value (per-instance)
+};
+
+// TEST is already defined by compiler flag -DTEST, no need to redefine
+#include "braids/macro_oscillator.h"
+// Undefine conflicting macro from braids before including plaits
+#undef LUT_FM_FREQUENCY_QUANTIZER
+#include "plaits/dsp/voice.h"
+#include "stmlib/utils/buffer_allocator.h"
+
+#define MUTATED_URI "https://github.com/PatttF/zynMI/plugins/mutated"
+
+// Helper function for clipping
+template<typename T>
+inline T Clip(T value, T min, T max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}
+
+typedef enum {
+    MUTATED_MIDI_IN = 0,
+    // Braids
+    BRAIDS_LEVEL,
+    BRAIDS_SHAPE,
+    BRAIDS_COARSE,
+    BRAIDS_FINE,
+    BRAIDS_FM,
+    BRAIDS_TIMBRE,
+    BRAIDS_COLOR,
+    BRAIDS_ATTACK,
+    BRAIDS_DECAY,
+    BRAIDS_SUSTAIN,
+    BRAIDS_RELEASE,
+    // Plaits
+    PLAITS_LEVEL,
+    PLAITS_ENGINE,
+    PLAITS_COARSE,
+    PLAITS_FINE,
+    PLAITS_HARMONICS,
+    PLAITS_TIMBRE,
+    PLAITS_MORPH,
+    PLAITS_LPG_DECAY,
+    PLAITS_LPG_COLOUR,
+    PLAITS_ATTACK,
+    PLAITS_DECAY,
+    PLAITS_SUSTAIN,
+    PLAITS_RELEASE,
+    // Modulation 1
+    MOD1_SOURCE,
+    MOD1_TARGET,
+    MOD1_AMOUNT,
+    MOD1_DETUNE,
+    // Modulation 2
+    MOD2_SOURCE,
+    MOD2_TARGET,
+    MOD2_AMOUNT,
+    MOD2_DETUNE,
+    // Modulation 3
+    MOD3_SOURCE,
+    MOD3_TARGET,
+    MOD3_AMOUNT,
+    MOD3_DETUNE,
+    // Filter 1
+    FILTER_TYPE,
+    FILTER_ROUTING,
+    FILTER_CUTOFF,
+    FILTER_RESONANCE,
+    // Filter 2
+    FILTER2_TYPE,
+    FILTER2_ROUTING,
+    FILTER2_CUTOFF,
+    FILTER2_RESONANCE,
+    // Panning and Glide
+    BRAIDS_PAN,
+    BRAIDS_GLIDE,
+    PLAITS_PAN,
+    PLAITS_GLIDE,
+    // Detune (Octave shift)
+    BRAIDS_DETUNE,
+    PLAITS_DETUNE,
+    // Reverb
+    REVERB_ROUTING,
+    REVERB_TIME,
+    REVERB_DELAY,
+    REVERB_BASS,
+    REVERB_TREBLE,
+    REVERB_MIX,
+    REVERB_SIZE,        // Room size (0.5-2.0)
+    REVERB_DIFFUSION,   // Diffusion amount (0-1)
+    REVERB_MODULATION,  // Modulation depth (0-1)
+    REVERB_WIDTH,       // Stereo width (0-1)
+    REVERB_GAIN,        // Output gain (0-2)
+    // Outputs
+    MUTATED_OUT_L,
+    MUTATED_OUT_R
+} PortIndex;
+
+// Modulation sources
+enum ModSource {
+    MOD_SRC_NONE = 0,
+    MOD_SRC_BRAIDS_OUT,
+    MOD_SRC_PLAITS_OUT,
+    MOD_SRC_BRAIDS_ENV,
+    MOD_SRC_PLAITS_ENV,
+    MOD_SRC_VELOCITY,
+    MOD_SRC_BRAIDS_TIMBRE,
+    MOD_SRC_BRAIDS_COLOR,
+    MOD_SRC_PLAITS_HARMONICS,
+    MOD_SRC_PLAITS_TIMBRE,
+    MOD_SRC_PLAITS_MORPH,
+    MOD_SRC_LFO_SINE,
+    MOD_SRC_LFO_SAW,
+    MOD_SRC_LFO_PWM
+};
+
+// Modulation targets
+enum ModTarget {
+    MOD_TGT_NONE = 0,
+    MOD_TGT_BRAIDS_TIMBRE,
+    MOD_TGT_BRAIDS_COLOR,
+    MOD_TGT_BRAIDS_FM,
+    MOD_TGT_PLAITS_HARMONICS,
+    MOD_TGT_PLAITS_TIMBRE,
+    MOD_TGT_PLAITS_MORPH,
+    MOD_TGT_PLAITS_LPG_DECAY,
+    MOD_TGT_PLAITS_LPG_COLOUR,
+    MOD_TGT_BRAIDS_PITCH,
+    MOD_TGT_PLAITS_PITCH,
+    MOD_TGT_BRAIDS_LEVEL,
+    MOD_TGT_PLAITS_LEVEL,
+    MOD_TGT_BRAIDS_OUT,
+    MOD_TGT_PLAITS_OUT,
+    MOD_TGT_REVERB_TIME,
+    MOD_TGT_REVERB_MIX,
+    MOD_TGT_REVERB_BASS,
+    MOD_TGT_REVERB_TREBLE,
+    MOD_TGT_REVERB_SIZE,
+    MOD_TGT_REVERB_DIFFUSION,
+    MOD_TGT_REVERB_WIDTH
+};
+
+// Filter types
+enum FilterType {
+    FILTER_OFF = 0,
+    FILTER_MOOG,
+    FILTER_MS20,
+    FILTER_TB303,
+    FILTER_SEM,
+    FILTER_SALLENKEY,
+    FILTER_DIODE,
+    FILTER_OBERHEIM
+};
+
+// Filter routing
+enum FilterRouting {
+    ROUTE_BRAIDS = 0,
+    ROUTE_PLAITS,
+    ROUTE_BOTH
+};
+
+// Reverb routing
+enum ReverbRouting {
+    REVERB_OFF = 0,
+    REVERB_BRAIDS,
+    REVERB_PLAITS,
+    REVERB_BOTH_OSC,
+    REVERB_POST_FILTER
+};
+
+typedef struct {
+    // Port buffers
+    const LV2_Atom_Sequence* midi_in;
+    const float* braids_level;
+    const float* braids_shape;
+    const float* braids_coarse;
+    const float* braids_fine;
+    const float* braids_fm;
+    const float* braids_timbre;
+    const float* braids_color;
+    const float* braids_attack;
+    const float* braids_decay;
+    const float* braids_sustain;
+    const float* braids_release;
+    const float* plaits_level;
+    const float* plaits_engine;
+    const float* plaits_coarse;
+    const float* plaits_fine;
+    const float* plaits_harmonics;
+    const float* plaits_timbre;
+    const float* plaits_morph;
+    const float* plaits_lpg_decay;
+    const float* plaits_lpg_colour;
+    const float* plaits_attack;
+    const float* plaits_decay;
+    const float* plaits_sustain;
+    const float* plaits_release;
+    const float* mod1_source;
+    const float* mod1_target;
+    const float* mod1_amount;
+    const float* mod1_detune;
+    const float* mod2_source;
+    const float* mod2_target;
+    const float* mod2_amount;
+    const float* mod2_detune;
+    const float* mod3_source;
+    const float* mod3_target;
+    const float* mod3_amount;
+    const float* mod3_detune;
+    const float* filter_type;
+    const float* filter_routing;
+    const float* filter_cutoff;
+    const float* filter_resonance;
+    const float* filter2_type;
+    const float* filter2_routing;
+    const float* filter2_cutoff;
+    const float* filter2_resonance;
+    const float* braids_pan;
+    const float* braids_glide;
+    const float* plaits_pan;
+    const float* plaits_glide;
+    const float* braids_detune;
+    const float* plaits_detune;
+    const float* reverb_routing;
+    const float* reverb_time;
+    const float* reverb_delay;
+    const float* reverb_bass;
+    const float* reverb_treble;
+    const float* reverb_mix;
+    const float* reverb_size;
+    const float* reverb_diffusion;
+    const float* reverb_modulation;
+    const float* reverb_width;
+    const float* reverb_gain;
+    float* out_l;
+    float* out_r;
+    
+    // MIDI
+    LV2_URID_Map* map;
+    LV2_URID midi_event_uri;
+    uint8_t current_note;
+    uint8_t velocity;
+    bool note_on;
+    
+    // Braids oscillator
+    braids::MacroOscillator osc;
+    uint8_t sync_buffer[24];
+    int16_t render_buffer[24];
+    SimpleADSR braids_envelope;
+    
+    // Plaits oscillator
+    plaits::Voice* plaits_voice;
+    uint8_t plaits_shared_buffer[16384];
+    plaits::Patch plaits_patch;
+    plaits::Modulations plaits_modulations;
+    SimpleADSR plaits_envelope;
+    
+    // Modulation values (computed per-sample)
+    float braids_raw_output;
+    float plaits_raw_output;
+    
+    // Filters (Filter 1)
+    MoogFilter moog_filter;
+    MS20Filter ms20_filter;
+    TB303Filter tb303_filter;
+    SEMFilter sem_filter;
+    SallenKeyFilter sallenkey_filter;
+    DiodeLadderFilter diode_filter;
+    OberheimFilter oberheim_filter;
+    
+    // Filters (Filter 2)
+    MoogFilter moog_filter2;
+    MS20Filter ms20_filter2;
+    TB303Filter tb303_filter2;
+    SEMFilter sem_filter2;
+    SallenKeyFilter sallenkey_filter2;
+    DiodeLadderFilter diode_filter2;
+    OberheimFilter oberheim_filter2;
+    
+    // LFOs
+    LFO lfo_sine;
+    LFO lfo_saw;
+    LFO lfo_pwm;
+    float lfo_sine_value;
+    float lfo_saw_value;
+    float lfo_pwm_value;
+    float lfo_sine_rate;
+    float lfo_saw_rate;
+    float lfo_pwm_rate;
+    
+    // Glide (portamento)
+    float braids_current_note;
+    float plaits_current_note;
+    
+    // Track previous shape/engine to avoid unnecessary Strike() calls
+    int previous_braids_shape;
+    int previous_plaits_engine;
+    
+    // Reverb
+    NepentheReverb reverb;
+    
+    double sample_rate;
+} Mutated;
+
+static LV2_Handle
+instantiate(const LV2_Descriptor* descriptor,
+            double rate,
+            const char* bundle_path,
+            const LV2_Feature* const* features)
+{
+    Mutated* mutated = (Mutated*)calloc(1, sizeof(Mutated));
+    if (!mutated) {
+        return NULL;
+    }
+    
+    mutated->map = NULL;
+    if (features) {
+        for (int i = 0; features[i]; i++) {
+            if (!strcmp(features[i]->URI, LV2_URID__map)) {
+                mutated->map = (LV2_URID_Map*)features[i]->data;
+                break;
+            }
+        }
+    }
+    
+    mutated->midi_event_uri = mutated->map ? 
+        mutated->map->map(mutated->map->handle, LV2_MIDI__MidiEvent) : 0;
+    
+    mutated->sample_rate = rate;
+    mutated->current_note = 60;
+    mutated->velocity = 100;
+    mutated->note_on = false;
+    
+    // Initialize Braids
+    mutated->osc.Init();
+    mutated->braids_envelope.Init(rate);
+    
+    // Initialize Plaits
+    mutated->plaits_voice = new (std::nothrow) plaits::Voice;
+    if (!mutated->plaits_voice) {
+        free(mutated);
+        return NULL;
+    }
+    memset(mutated->plaits_shared_buffer, 0, sizeof(mutated->plaits_shared_buffer));
+    stmlib::BufferAllocator allocator;
+    allocator.Init(mutated->plaits_shared_buffer, sizeof(mutated->plaits_shared_buffer));
+    mutated->plaits_voice->Init(&allocator);
+    memset(&mutated->plaits_patch, 0, sizeof(mutated->plaits_patch));
+    memset(&mutated->plaits_modulations, 0, sizeof(mutated->plaits_modulations));
+    mutated->plaits_patch.engine = 0;
+    mutated->plaits_patch.lpg_colour = 0.5f;
+    mutated->plaits_patch.decay = 0.5f;
+    mutated->plaits_patch.note = 48.0f;
+    mutated->plaits_patch.harmonics = 0.5f;
+    mutated->plaits_patch.timbre = 0.5f;
+    mutated->plaits_patch.morph = 0.5f;
+    mutated->plaits_envelope.Init(rate);
+    
+    // Initialize filters (Filter 1)
+    mutated->moog_filter.Init(rate);
+    mutated->ms20_filter.Init(rate);
+    mutated->tb303_filter.Init(rate);
+    mutated->sem_filter.Init(rate);
+    mutated->sallenkey_filter.Init(rate);
+    mutated->diode_filter.Init(rate);
+    mutated->oberheim_filter.Init(rate);
+    
+    // Initialize filters (Filter 2)
+    mutated->moog_filter2.Init(rate);
+    mutated->ms20_filter2.Init(rate);
+    mutated->tb303_filter2.Init(rate);
+    mutated->sem_filter2.Init(rate);
+    mutated->sallenkey_filter2.Init(rate);
+    mutated->diode_filter2.Init(rate);
+    mutated->oberheim_filter2.Init(rate);
+    
+    // Initialize LFOs
+    mutated->lfo_sine.Init(rate);
+    mutated->lfo_saw.Init(rate);
+    mutated->lfo_pwm.Init(rate);
+    mutated->lfo_sine_value = 0.0f;
+    mutated->lfo_saw_value = 0.0f;
+    mutated->lfo_pwm_value = 0.0f;
+    mutated->lfo_sine_rate = 0.2f;
+    mutated->lfo_saw_rate = 0.2f;
+    mutated->lfo_pwm_rate = 0.2f;
+    
+    // Initialize previous shape/engine tracking
+    mutated->previous_braids_shape = -1;
+    mutated->previous_plaits_engine = -1;
+    
+    // Initialize glide
+    mutated->braids_current_note = 60.0f;
+    mutated->plaits_current_note = 60.0f;
+    
+    // Initialize reverb
+    mutated->reverb.Init(rate);
+    
+    return (LV2_Handle)mutated;
+}
+
+static void
+connect_port(LV2_Handle instance, uint32_t port, void* data)
+{
+    Mutated* mutated = (Mutated*)instance;
+    
+    switch ((PortIndex)port) {
+        case MUTATED_MIDI_IN:
+            mutated->midi_in = (const LV2_Atom_Sequence*)data;
+            break;
+        case BRAIDS_LEVEL:
+            mutated->braids_level = (const float*)data;
+            break;
+        case BRAIDS_SHAPE:
+            mutated->braids_shape = (const float*)data;
+            break;
+        case BRAIDS_COARSE:
+            mutated->braids_coarse = (const float*)data;
+            break;
+        case BRAIDS_FINE:
+            mutated->braids_fine = (const float*)data;
+            break;
+        case BRAIDS_FM:
+            mutated->braids_fm = (const float*)data;
+            break;
+        case BRAIDS_TIMBRE:
+            mutated->braids_timbre = (const float*)data;
+            break;
+        case BRAIDS_COLOR:
+            mutated->braids_color = (const float*)data;
+            break;
+        case BRAIDS_ATTACK:
+            mutated->braids_attack = (const float*)data;
+            break;
+        case BRAIDS_DECAY:
+            mutated->braids_decay = (const float*)data;
+            break;
+        case BRAIDS_SUSTAIN:
+            mutated->braids_sustain = (const float*)data;
+            break;
+        case BRAIDS_RELEASE:
+            mutated->braids_release = (const float*)data;
+            break;
+        case PLAITS_LEVEL:
+            mutated->plaits_level = (const float*)data;
+            break;
+        case PLAITS_ENGINE:
+            mutated->plaits_engine = (const float*)data;
+            break;
+        case PLAITS_COARSE:
+            mutated->plaits_coarse = (const float*)data;
+            break;
+        case PLAITS_FINE:
+            mutated->plaits_fine = (const float*)data;
+            break;
+        case PLAITS_HARMONICS:
+            mutated->plaits_harmonics = (const float*)data;
+            break;
+        case PLAITS_TIMBRE:
+            mutated->plaits_timbre = (const float*)data;
+            break;
+        case PLAITS_MORPH:
+            mutated->plaits_morph = (const float*)data;
+            break;
+        case PLAITS_LPG_DECAY:
+            mutated->plaits_lpg_decay = (const float*)data;
+            break;
+        case PLAITS_LPG_COLOUR:
+            mutated->plaits_lpg_colour = (const float*)data;
+            break;
+        case PLAITS_ATTACK:
+            mutated->plaits_attack = (const float*)data;
+            break;
+        case PLAITS_DECAY:
+            mutated->plaits_decay = (const float*)data;
+            break;
+        case PLAITS_SUSTAIN:
+            mutated->plaits_sustain = (const float*)data;
+            break;
+        case PLAITS_RELEASE:
+            mutated->plaits_release = (const float*)data;
+            break;
+        case MOD1_SOURCE:
+            mutated->mod1_source = (const float*)data;
+            break;
+        case MOD1_TARGET:
+            mutated->mod1_target = (const float*)data;
+            break;
+        case MOD1_AMOUNT:
+            mutated->mod1_amount = (const float*)data;
+            break;
+        case MOD1_DETUNE:
+            mutated->mod1_detune = (const float*)data;
+            break;
+        case MOD2_SOURCE:
+            mutated->mod2_source = (const float*)data;
+            break;
+        case MOD2_TARGET:
+            mutated->mod2_target = (const float*)data;
+            break;
+        case MOD2_AMOUNT:
+            mutated->mod2_amount = (const float*)data;
+            break;
+        case MOD2_DETUNE:
+            mutated->mod2_detune = (const float*)data;
+            break;
+        case MOD3_SOURCE:
+            mutated->mod3_source = (const float*)data;
+            break;
+        case MOD3_TARGET:
+            mutated->mod3_target = (const float*)data;
+            break;
+        case MOD3_AMOUNT:
+            mutated->mod3_amount = (const float*)data;
+            break;
+        case MOD3_DETUNE:
+            mutated->mod3_detune = (const float*)data;
+            break;
+        case FILTER_TYPE:
+            mutated->filter_type = (const float*)data;
+            break;
+        case FILTER_ROUTING:
+            mutated->filter_routing = (const float*)data;
+            break;
+        case FILTER_CUTOFF:
+            mutated->filter_cutoff = (const float*)data;
+            break;
+        case FILTER_RESONANCE:
+            mutated->filter_resonance = (const float*)data;
+            break;
+        case FILTER2_TYPE:
+            mutated->filter2_type = (const float*)data;
+            break;
+        case FILTER2_ROUTING:
+            mutated->filter2_routing = (const float*)data;
+            break;
+        case FILTER2_CUTOFF:
+            mutated->filter2_cutoff = (const float*)data;
+            break;
+        case FILTER2_RESONANCE:
+            mutated->filter2_resonance = (const float*)data;
+            break;
+        case BRAIDS_PAN:
+            mutated->braids_pan = (const float*)data;
+            break;
+        case BRAIDS_GLIDE:
+            mutated->braids_glide = (const float*)data;
+            break;
+        case PLAITS_PAN:
+            mutated->plaits_pan = (const float*)data;
+            break;
+        case PLAITS_GLIDE:
+            mutated->plaits_glide = (const float*)data;
+            break;
+        case BRAIDS_DETUNE:
+            mutated->braids_detune = (const float*)data;
+            break;
+        case PLAITS_DETUNE:
+            mutated->plaits_detune = (const float*)data;
+            break;
+        case REVERB_ROUTING:
+            mutated->reverb_routing = (const float*)data;
+            break;
+        case REVERB_TIME:
+            mutated->reverb_time = (const float*)data;
+            break;
+        case REVERB_DELAY:
+            mutated->reverb_delay = (const float*)data;
+            break;
+        case REVERB_BASS:
+            mutated->reverb_bass = (const float*)data;
+            break;
+        case REVERB_TREBLE:
+            mutated->reverb_treble = (const float*)data;
+            break;
+        case REVERB_MIX:
+            mutated->reverb_mix = (const float*)data;
+            break;
+        case REVERB_SIZE:
+            mutated->reverb_size = (const float*)data;
+            break;
+        case REVERB_DIFFUSION:
+            mutated->reverb_diffusion = (const float*)data;
+            break;
+        case REVERB_MODULATION:
+            mutated->reverb_modulation = (const float*)data;
+            break;
+        case REVERB_WIDTH:
+            mutated->reverb_width = (const float*)data;
+            break;
+        case REVERB_GAIN:
+            mutated->reverb_gain = (const float*)data;
+            break;
+        case MUTATED_OUT_L:
+            mutated->out_l = (float*)data;
+            break;
+        case MUTATED_OUT_R:
+            mutated->out_r = (float*)data;
+            break;
+    }
+}
+
+static void
+activate(LV2_Handle instance)
+{
+}
+
+// Get modulation source value
+static float get_mod_source(Mutated* mutated, int source) {
+    switch (source) {
+        case MOD_SRC_BRAIDS_OUT: return mutated->braids_raw_output;
+        case MOD_SRC_PLAITS_OUT: return mutated->plaits_raw_output;
+        case MOD_SRC_BRAIDS_ENV: return mutated->braids_envelope.GetValue();
+        case MOD_SRC_PLAITS_ENV: return mutated->plaits_envelope.GetValue();
+        case MOD_SRC_VELOCITY: return mutated->velocity / 127.0f;
+        case MOD_SRC_BRAIDS_TIMBRE: return *mutated->braids_timbre;
+        case MOD_SRC_BRAIDS_COLOR: return *mutated->braids_color;
+        case MOD_SRC_PLAITS_HARMONICS: return *mutated->plaits_harmonics;
+        case MOD_SRC_PLAITS_TIMBRE: return *mutated->plaits_timbre;
+        case MOD_SRC_PLAITS_MORPH: return *mutated->plaits_morph;
+        case MOD_SRC_LFO_SINE: return mutated->lfo_sine_value;
+        case MOD_SRC_LFO_SAW: return mutated->lfo_saw_value;
+        case MOD_SRC_LFO_PWM: return mutated->lfo_pwm_value;
+        default: return 0.0f;
+    }
+}
+
+static void
+run(LV2_Handle instance, uint32_t n_samples)
+{
+    Mutated* mutated = (Mutated*)instance;
+    
+    if (!mutated || !mutated->out_l || !mutated->out_r) {
+        return;
+    }
+    
+    // Process MIDI
+    bool new_trigger = false;
+    if (mutated->midi_event_uri && mutated->midi_in) {
+        LV2_ATOM_SEQUENCE_FOREACH(mutated->midi_in, ev) {
+            if (ev->body.type == mutated->midi_event_uri) {
+                const uint8_t* const msg = (const uint8_t*)(ev + 1);
+                
+                switch (lv2_midi_message_type(msg)) {
+                    case LV2_MIDI_MSG_NOTE_ON:
+                        if (msg[2] > 0) {
+                            mutated->current_note = msg[1];
+                            mutated->velocity = msg[2];
+                            mutated->note_on = true;
+                            new_trigger = true;
+                            // Trigger both envelopes
+                            mutated->braids_envelope.Trigger();
+                            mutated->plaits_envelope.Trigger();
+                            // Trigger strike for Braids percussion engines (drum/kick modes)
+                            mutated->osc.Strike();
+                        } else {
+                            if (msg[1] == mutated->current_note) {
+                                mutated->note_on = false;
+                                // Release both envelopes
+                                mutated->braids_envelope.Release();
+                                mutated->plaits_envelope.Release();
+                            }
+                        }
+                        break;
+                        
+                    case LV2_MIDI_MSG_NOTE_OFF:
+                        if (msg[1] == mutated->current_note) {
+                            mutated->note_on = false;
+                            // Release both envelopes
+                            mutated->braids_envelope.Release();
+                            mutated->plaits_envelope.Release();
+                        }
+                        break;
+                }
+            }
+        }
+    }
+    
+    // Calculate LFO rates based on active modulation slots using them
+    // Base rate: 0.2 Hz (5 second cycle)
+    // Detune/Speed parameter maps to rate multiplier: -1 to 1 -> 0.1x to 10x
+    float sine_max_speed = 0.0f;
+    float saw_max_speed = 0.0f;
+    float pwm_max_speed = 0.0f;
+    
+    for (int mod_slot = 0; mod_slot < 3; mod_slot++) {
+        const float* src_param = (mod_slot == 0) ? mutated->mod1_source : 
+                                 (mod_slot == 1) ? mutated->mod2_source : mutated->mod3_source;
+        const float* det_param = (mod_slot == 0) ? mutated->mod1_detune :
+                                 (mod_slot == 1) ? mutated->mod2_detune : mutated->mod3_detune;
+        
+        int source = (int)(*src_param);
+        float detune = *det_param;
+        
+        // Map detune (-1 to 1) to speed multiplier (0.1x to 10x)
+        // 0 = 1x (base rate), negative = slower, positive = faster
+        float speed_mult = powf(10.0f, detune);  // 10^detune gives 0.1 to 10 range
+        
+        if (source == MOD_SRC_LFO_SINE && speed_mult > sine_max_speed) {
+            sine_max_speed = speed_mult;
+        }
+        if (source == MOD_SRC_LFO_SAW && speed_mult > saw_max_speed) {
+            saw_max_speed = speed_mult;
+        }
+        if (source == MOD_SRC_LFO_PWM && speed_mult > pwm_max_speed) {
+            pwm_max_speed = speed_mult;
+        }
+    }
+    
+    // If no modulation slot is using an LFO, use base rate
+    if (sine_max_speed == 0.0f) sine_max_speed = 1.0f;
+    if (saw_max_speed == 0.0f) saw_max_speed = 1.0f;
+    if (pwm_max_speed == 0.0f) pwm_max_speed = 1.0f;
+    
+    // Update LFO rates
+    mutated->lfo_sine_rate = 0.2f * sine_max_speed;
+    mutated->lfo_saw_rate = 0.2f * saw_max_speed;
+    mutated->lfo_pwm_rate = 0.2f * pwm_max_speed;
+    
+    // Get parameters
+    int braids_shape = (int)(*mutated->braids_shape);
+    bool braids_enabled = (braids_shape >= 0);
+    if (braids_shape < 0) braids_shape = 0;
+    if (braids_shape > 47) braids_shape = 47;
+    
+    int plaits_engine = (int)(*mutated->plaits_engine);
+    bool plaits_enabled = (plaits_engine >= 0);
+    if (plaits_engine < 0) plaits_engine = 0;
+    if (plaits_engine > 15) plaits_engine = 15;
+    
+    float braids_level = *mutated->braids_level;
+    float plaits_level = *mutated->plaits_level;
+    
+    // Update envelope parameters
+    mutated->braids_envelope.SetParameters(*mutated->braids_attack, *mutated->braids_decay,
+                                           *mutated->braids_sustain, *mutated->braids_release);
+    mutated->plaits_envelope.SetParameters(*mutated->plaits_attack, *mutated->plaits_decay,
+                                           *mutated->plaits_sustain, *mutated->plaits_release);
+    
+    // Initialize modulation storage
+    mutated->braids_raw_output = 0.0f;
+    mutated->plaits_raw_output = 0.0f;
+    
+    // Get base parameter values (including levels)
+    float base_braids_timbre = *mutated->braids_timbre;
+    float base_braids_color = *mutated->braids_color;
+    float base_braids_fm = *mutated->braids_fm;
+    float base_braids_level = *mutated->braids_level;
+    float base_plaits_harmonics = *mutated->plaits_harmonics;
+    float base_plaits_timbre = *mutated->plaits_timbre;
+    float base_plaits_morph = *mutated->plaits_morph;
+    float base_plaits_lpg_decay = *mutated->plaits_lpg_decay;
+    float base_plaits_lpg_colour = *mutated->plaits_lpg_colour;
+    float base_plaits_level = *mutated->plaits_level;
+    float base_reverb_time = *mutated->reverb_time;
+    float base_reverb_mix = *mutated->reverb_mix;
+    float base_reverb_bass = *mutated->reverb_bass;
+    float base_reverb_treble = *mutated->reverb_treble;
+    
+    // Process in 24-sample blocks
+    uint32_t offset = 0;
+    while (offset < n_samples) {
+        uint32_t block_size = n_samples - offset;
+        if (block_size > 24) {
+            block_size = 24;
+        }
+        
+        // Update LFOs at control rate (once per 24-sample block)
+        mutated->lfo_sine_value = mutated->lfo_sine.Process(mutated->lfo_sine_rate, 0.5f, 0);   // Sine
+        mutated->lfo_saw_value = mutated->lfo_saw.Process(mutated->lfo_saw_rate, 0.5f, 2);      // Sawtooth
+        mutated->lfo_pwm_value = mutated->lfo_pwm.Process(mutated->lfo_pwm_rate, 0.5f, 4);      // Square/PWM
+        
+        // Apply modulation (per-block)
+        float mod_braids_timbre = base_braids_timbre;
+        float mod_braids_color = base_braids_color;
+        float mod_braids_fm = base_braids_fm;
+        float mod_braids_pitch = 0.0f;
+        float mod_braids_level = base_braids_level;
+        float mod_braids_out = 1.0f;  // Output scaling
+        float mod_plaits_harmonics = base_plaits_harmonics;
+        float mod_plaits_timbre = base_plaits_timbre;
+        float mod_plaits_morph = base_plaits_morph;
+        float mod_plaits_lpg_decay = base_plaits_lpg_decay;
+        float mod_plaits_lpg_colour = base_plaits_lpg_colour;
+        float mod_plaits_pitch = 0.0f;
+        float mod_plaits_level = base_plaits_level;
+        float mod_plaits_out = 1.0f;  // Output scaling
+        float mod_reverb_time = base_reverb_time;
+        float mod_reverb_mix = base_reverb_mix;
+        float mod_reverb_bass = base_reverb_bass;
+        float mod_reverb_treble = base_reverb_treble;
+        float mod_reverb_size = 0.5f;  // Will be read from parameter later
+        float mod_reverb_diffusion = 0.7f;
+        float mod_reverb_width = 1.0f;
+        
+        // Process modulation slots
+        for (int mod_slot = 0; mod_slot < 3; mod_slot++) {
+            const float* src_param = (mod_slot == 0) ? mutated->mod1_source : 
+                                     (mod_slot == 1) ? mutated->mod2_source : mutated->mod3_source;
+            const float* tgt_param = (mod_slot == 0) ? mutated->mod1_target :
+                                     (mod_slot == 1) ? mutated->mod2_target : mutated->mod3_target;
+            const float* amt_param = (mod_slot == 0) ? mutated->mod1_amount :
+                                     (mod_slot == 1) ? mutated->mod2_amount : mutated->mod3_amount;
+            const float* det_param = (mod_slot == 0) ? mutated->mod1_detune :
+                                     (mod_slot == 1) ? mutated->mod2_detune : mutated->mod3_detune;
+            
+            int source = (int)(*src_param);
+            int target = (int)(*tgt_param);
+            float amount = *amt_param;
+            float detune = *det_param;
+            
+            if (source != MOD_SRC_NONE && target != MOD_TGT_NONE) {
+                float mod_value = get_mod_source(mutated, source) * amount;
+                
+                switch (target) {
+                    case MOD_TGT_BRAIDS_TIMBRE: mod_braids_timbre += mod_value; break;
+                    case MOD_TGT_BRAIDS_COLOR: mod_braids_color += mod_value; break;
+                    case MOD_TGT_BRAIDS_FM: mod_braids_fm += mod_value; break;
+                    case MOD_TGT_BRAIDS_PITCH: mod_braids_pitch += detune * mod_value * 12.0f; break;
+                    case MOD_TGT_BRAIDS_LEVEL: mod_braids_level += mod_value; break;
+                    case MOD_TGT_BRAIDS_OUT: mod_braids_out += mod_value; break;
+                    case MOD_TGT_PLAITS_HARMONICS: mod_plaits_harmonics += mod_value; break;
+                    case MOD_TGT_PLAITS_TIMBRE: mod_plaits_timbre += mod_value; break;
+                    case MOD_TGT_PLAITS_MORPH: mod_plaits_morph += mod_value; break;
+                    case MOD_TGT_PLAITS_LPG_DECAY: mod_plaits_lpg_decay += mod_value; break;
+                    case MOD_TGT_PLAITS_LPG_COLOUR: mod_plaits_lpg_colour += mod_value; break;
+                    case MOD_TGT_PLAITS_PITCH: mod_plaits_pitch += detune * mod_value * 12.0f; break;
+                    case MOD_TGT_PLAITS_LEVEL: mod_plaits_level += mod_value; break;
+                    case MOD_TGT_PLAITS_OUT: mod_plaits_out += mod_value; break;
+                    case MOD_TGT_REVERB_TIME: mod_reverb_time += mod_value * 7.5f; break;  // Scale to 0.5-8.0s range
+                    case MOD_TGT_REVERB_MIX: mod_reverb_mix += mod_value; break;
+                    case MOD_TGT_REVERB_BASS: mod_reverb_bass += mod_value * 2.0f; break;  // Scale to -1.0 to +1.0 range
+                    case MOD_TGT_REVERB_TREBLE: mod_reverb_treble += mod_value; break;
+                    case MOD_TGT_REVERB_SIZE: mod_reverb_size += mod_value; break;
+                    case MOD_TGT_REVERB_DIFFUSION: mod_reverb_diffusion += mod_value; break;
+                    case MOD_TGT_REVERB_WIDTH: mod_reverb_width += mod_value; break;
+                }
+            }
+        }
+        
+        // Clamp modulated values
+        mod_braids_timbre = Clip(mod_braids_timbre, 0.0f, 1.0f);
+        mod_braids_color = Clip(mod_braids_color, 0.0f, 1.0f);
+        mod_braids_level = Clip(mod_braids_level, 0.0f, 1.0f);
+        mod_braids_out = Clip(mod_braids_out, 0.0f, 2.0f);  // Allow up to 2x boost
+        mod_plaits_harmonics = Clip(mod_plaits_harmonics, 0.0f, 1.0f);
+        mod_plaits_timbre = Clip(mod_plaits_timbre, 0.0f, 1.0f);
+        mod_plaits_morph = Clip(mod_plaits_morph, 0.0f, 1.0f);
+        mod_plaits_lpg_decay = Clip(mod_plaits_lpg_decay, 0.0f, 1.0f);
+        mod_plaits_lpg_colour = Clip(mod_plaits_lpg_colour, 0.0f, 1.0f);
+        mod_plaits_level = Clip(mod_plaits_level, 0.0f, 1.0f);
+        mod_plaits_out = Clip(mod_plaits_out, 0.0f, 2.0f);  // Allow up to 2x boost
+        mod_reverb_time = Clip(mod_reverb_time, 0.5f, 8.0f);
+        mod_reverb_mix = Clip(mod_reverb_mix, 0.0f, 1.0f);
+        mod_reverb_bass = Clip(mod_reverb_bass, -1.0f, 1.0f);
+        mod_reverb_treble = Clip(mod_reverb_treble, 0.0f, 1.0f);
+        mod_reverb_size = Clip(mod_reverb_size, 0.0f, 1.0f);
+        mod_reverb_diffusion = Clip(mod_reverb_diffusion, 0.0f, 1.0f);
+        mod_reverb_width = Clip(mod_reverb_width, 0.0f, 1.0f);
+        
+        // Apply glide (portamento) to notes
+        float braids_target_note = (float)mutated->current_note;
+        float plaits_target_note = (float)mutated->current_note;
+        
+        // Glide time: 0 = instant, 1 = 1 second
+        float braids_glide_time = *mutated->braids_glide;
+        float plaits_glide_time = *mutated->plaits_glide;
+        
+        if (braids_glide_time > 0.001f) {
+            // Calculate glide coefficient (higher = slower glide)
+            float braids_glide_coeff = 1.0f - expf(-1.0f / (braids_glide_time * mutated->sample_rate / 24.0f));
+            mutated->braids_current_note += (braids_target_note - mutated->braids_current_note) * braids_glide_coeff;
+        } else {
+            mutated->braids_current_note = braids_target_note;
+        }
+        
+        if (plaits_glide_time > 0.001f) {
+            float plaits_glide_coeff = 1.0f - expf(-1.0f / (plaits_glide_time * mutated->sample_rate / 24.0f));
+            mutated->plaits_current_note += (plaits_target_note - mutated->plaits_current_note) * plaits_glide_coeff;
+        } else {
+            mutated->plaits_current_note = plaits_target_note;
+        }
+        
+        // Calculate note for Braids (with glide, FM, detune and modulation)
+        float braids_note = mutated->braids_current_note + *mutated->braids_coarse + *mutated->braids_fine + 
+                           *mutated->braids_detune + (mod_braids_fm * 12.0f) + mod_braids_pitch;
+        
+        // Calculate note for Plaits (with glide, detune and modulation)
+        float plaits_note = mutated->plaits_current_note + *mutated->plaits_coarse + *mutated->plaits_fine + 
+                           *mutated->plaits_detune + mod_plaits_pitch;
+        
+        // --- BRAIDS ---
+        float braids_output[24] = {0};
+        
+        if (braids_enabled) {
+            // Only set shape if it changed (to avoid unnecessary Strike() calls)
+            // Do this outside envelope check so shape is always set correctly
+            if (braids_shape != mutated->previous_braids_shape) {
+                mutated->osc.set_shape((braids::MacroOscillatorShape)braids_shape);
+                mutated->previous_braids_shape = braids_shape;
+            }
+            
+            // Render if envelope is active (including release phase)
+            if (mutated->braids_envelope.IsActive()) {
+                // Set parameters (with modulation)
+                int16_t timbre = (int16_t)(mod_braids_timbre * 32767.0f);
+                int16_t color = (int16_t)(mod_braids_color * 32767.0f);
+                mutated->osc.set_parameters(timbre, color);
+                // Set pitch
+                int32_t pitch = static_cast<int32_t>((braids_note - 12.0f) * 128.0f);
+                pitch = Clip(pitch, 0, 16383);
+                mutated->osc.set_pitch(pitch);
+                
+                // Clear sync buffer (no hard sync)
+                memset(mutated->sync_buffer, 0, block_size);
+                
+                // Render
+                mutated->osc.Render(mutated->sync_buffer, mutated->render_buffer, block_size);
+                
+                // Convert to float and apply envelope
+                float vel_scale = mutated->velocity / 127.0f;
+                float sum_abs = 0.0f;
+                for (uint32_t i = 0; i < block_size; i++) {
+                    float env_value = mutated->braids_envelope.Process();
+                    float raw = (mutated->render_buffer[i] / 32768.0f);
+                    sum_abs += fabs(raw);  // Accumulate absolute values
+                    braids_output[i] = raw * vel_scale * mod_braids_level * env_value;
+                }
+                // Store average absolute value for modulation
+                mutated->braids_raw_output = sum_abs / block_size;
+            }
+        }
+        
+        // --- PLAITS ---
+        float plaits_output[24] = {0};
+        
+        if (plaits_enabled && mutated->plaits_voice) {
+            // Only set engine if it changed (to avoid unnecessary reinitialization)
+            // Do this outside envelope check so engine is always set correctly
+            if (plaits_engine != mutated->previous_plaits_engine) {
+                mutated->plaits_patch.engine = plaits_engine;
+                mutated->previous_plaits_engine = plaits_engine;
+            }
+            
+            // Render only if envelope is active
+            if (mutated->plaits_envelope.IsActive()) {
+                // Set parameters (with modulation)
+                mutated->plaits_patch.note = plaits_note;
+                mutated->plaits_patch.harmonics = mod_plaits_harmonics;
+                mutated->plaits_patch.timbre = mod_plaits_timbre;
+                mutated->plaits_patch.morph = mod_plaits_morph;
+                mutated->plaits_patch.decay = mod_plaits_lpg_decay;
+                mutated->plaits_patch.lpg_colour = mod_plaits_lpg_colour;
+                
+                // Set modulations
+                mutated->plaits_modulations.engine = 0.0f;
+                mutated->plaits_modulations.note = 0.0f;
+                mutated->plaits_modulations.frequency = 0.0f;
+                mutated->plaits_modulations.harmonics = 0.0f;
+                mutated->plaits_modulations.timbre = 0.0f;
+                mutated->plaits_modulations.morph = 0.0f;
+                mutated->plaits_modulations.trigger = (new_trigger && offset == 0) ? 1.0f : 0.0f;
+                mutated->plaits_modulations.level = 1.0f;
+                mutated->plaits_modulations.frequency_patched = false;
+                mutated->plaits_modulations.timbre_patched = false;
+                mutated->plaits_modulations.morph_patched = false;
+                mutated->plaits_modulations.trigger_patched = true;
+                mutated->plaits_modulations.level_patched = false;
+                
+                // Render
+                plaits::Voice::Frame plaits_frames[24];
+                mutated->plaits_voice->Render(mutated->plaits_patch, mutated->plaits_modulations, 
+                                             plaits_frames, block_size);
+                
+                // Convert to float and apply envelope (use ONLY main output, not aux)
+                float vel_scale = mutated->velocity / 127.0f;
+                float sum_abs = 0.0f;
+                for (uint32_t i = 0; i < block_size; i++) {
+                    float env_value = mutated->plaits_envelope.Process();
+                    float raw = (plaits_frames[i].out / 32768.0f);
+                    sum_abs += fabs(raw);  // Accumulate absolute values
+                    plaits_output[i] = raw * vel_scale * mod_plaits_level * env_value;
+                }
+                // Store average absolute value for modulation
+                mutated->plaits_raw_output = sum_abs / block_size;
+            }
+        }
+        
+        // Apply filter
+        int filter_type = (int)(*mutated->filter_type);
+        int filter_routing = (int)(*mutated->filter_routing);
+        float cutoff = *mutated->filter_cutoff;
+        float resonance = *mutated->filter_resonance;
+        
+        if (filter_type != FILTER_OFF) {
+            for (uint32_t i = 0; i < block_size; i++) {
+                float filtered_braids = braids_output[i];
+                float filtered_plaits = plaits_output[i];
+                
+                // Apply filter based on routing
+                if (filter_routing == ROUTE_BOTH) {
+                    // Sum signals first to avoid state corruption from processing same filter twice
+                    float mixed = braids_output[i] + plaits_output[i];
+                    float filtered_mixed = mixed;
+                    
+                    if (filter_type == FILTER_MOOG) {
+                        filtered_mixed = mutated->moog_filter.Process(mixed, cutoff, resonance);
+                    } else if (filter_type == FILTER_MS20) {
+                        filtered_mixed = mutated->ms20_filter.Process(mixed, cutoff, resonance);
+                    } else if (filter_type == FILTER_TB303) {
+                        filtered_mixed = mutated->tb303_filter.Process(mixed, cutoff, resonance);
+                    } else if (filter_type == FILTER_SEM) {
+                        filtered_mixed = mutated->sem_filter.Process(mixed, cutoff, resonance);
+                    } else if (filter_type == FILTER_SALLENKEY) {
+                        filtered_mixed = mutated->sallenkey_filter.Process(mixed, cutoff, resonance);
+                    } else if (filter_type == FILTER_DIODE) {
+                        filtered_mixed = mutated->diode_filter.Process(mixed, cutoff, resonance);
+                    } else if (filter_type == FILTER_OBERHEIM) {
+                        filtered_mixed = mutated->oberheim_filter.Process(mixed, cutoff, resonance);
+                    }
+                    
+                    // Maintain original signal ratio after filtering
+                    float total = braids_output[i] + plaits_output[i];
+                    if (fabs(total) > 1e-10f) {
+                        float braids_ratio = braids_output[i] / total;
+                        float plaits_ratio = plaits_output[i] / total;
+                        filtered_braids = filtered_mixed * braids_ratio;
+                        filtered_plaits = filtered_mixed * plaits_ratio;
+                    } else {
+                        filtered_braids = filtered_mixed * 0.5f;
+                        filtered_plaits = filtered_mixed * 0.5f;
+                    }
+                } else if (filter_routing == ROUTE_BRAIDS) {
+                    if (filter_type == FILTER_MOOG) {
+                        filtered_braids = mutated->moog_filter.Process(braids_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_MS20) {
+                        filtered_braids = mutated->ms20_filter.Process(braids_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_TB303) {
+                        filtered_braids = mutated->tb303_filter.Process(braids_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_SEM) {
+                        filtered_braids = mutated->sem_filter.Process(braids_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_SALLENKEY) {
+                        filtered_braids = mutated->sallenkey_filter.Process(braids_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_DIODE) {
+                        filtered_braids = mutated->diode_filter.Process(braids_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_OBERHEIM) {
+                        filtered_braids = mutated->oberheim_filter.Process(braids_output[i], cutoff, resonance);
+                    }
+                } else if (filter_routing == ROUTE_PLAITS) {
+                    if (filter_type == FILTER_MOOG) {
+                        filtered_plaits = mutated->moog_filter.Process(plaits_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_MS20) {
+                        filtered_plaits = mutated->ms20_filter.Process(plaits_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_TB303) {
+                        filtered_plaits = mutated->tb303_filter.Process(plaits_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_SEM) {
+                        filtered_plaits = mutated->sem_filter.Process(plaits_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_SALLENKEY) {
+                        filtered_plaits = mutated->sallenkey_filter.Process(plaits_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_DIODE) {
+                        filtered_plaits = mutated->diode_filter.Process(plaits_output[i], cutoff, resonance);
+                    } else if (filter_type == FILTER_OBERHEIM) {
+                        filtered_plaits = mutated->oberheim_filter.Process(plaits_output[i], cutoff, resonance);
+                    }
+                }
+                
+                braids_output[i] = filtered_braids;
+                plaits_output[i] = filtered_plaits;
+            }
+        }
+        
+        // Apply second filter (cascaded after first filter)
+        int filter2_type = (int)(*mutated->filter2_type);
+        int filter2_routing = (int)(*mutated->filter2_routing);
+        float cutoff2 = *mutated->filter2_cutoff;
+        float resonance2 = *mutated->filter2_resonance;
+        
+        if (filter2_type != FILTER_OFF) {
+            for (uint32_t i = 0; i < block_size; i++) {
+                float filtered_braids = braids_output[i];
+                float filtered_plaits = plaits_output[i];
+                
+                // Apply second filter based on routing
+                if (filter2_routing == ROUTE_BOTH) {
+                    // Sum signals first to avoid state corruption from processing same filter twice
+                    float mixed = braids_output[i] + plaits_output[i];
+                    float filtered_mixed = mixed;
+                    
+                    if (filter2_type == FILTER_MOOG) {
+                        filtered_mixed = mutated->moog_filter2.Process(mixed, cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_MS20) {
+                        filtered_mixed = mutated->ms20_filter2.Process(mixed, cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_TB303) {
+                        filtered_mixed = mutated->tb303_filter2.Process(mixed, cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_SEM) {
+                        filtered_mixed = mutated->sem_filter2.Process(mixed, cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_SALLENKEY) {
+                        filtered_mixed = mutated->sallenkey_filter2.Process(mixed, cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_DIODE) {
+                        filtered_mixed = mutated->diode_filter2.Process(mixed, cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_OBERHEIM) {
+                        filtered_mixed = mutated->oberheim_filter2.Process(mixed, cutoff2, resonance2);
+                    }
+                    
+                    // Maintain original signal ratio after filtering
+                    float total = braids_output[i] + plaits_output[i];
+                    if (fabs(total) > 1e-10f) {
+                        float braids_ratio = braids_output[i] / total;
+                        float plaits_ratio = plaits_output[i] / total;
+                        filtered_braids = filtered_mixed * braids_ratio;
+                        filtered_plaits = filtered_mixed * plaits_ratio;
+                    } else {
+                        filtered_braids = filtered_mixed * 0.5f;
+                        filtered_plaits = filtered_mixed * 0.5f;
+                    }
+                } else if (filter2_routing == ROUTE_BRAIDS) {
+                    if (filter2_type == FILTER_MOOG) {
+                        filtered_braids = mutated->moog_filter2.Process(braids_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_MS20) {
+                        filtered_braids = mutated->ms20_filter2.Process(braids_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_TB303) {
+                        filtered_braids = mutated->tb303_filter2.Process(braids_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_SEM) {
+                        filtered_braids = mutated->sem_filter2.Process(braids_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_SALLENKEY) {
+                        filtered_braids = mutated->sallenkey_filter2.Process(braids_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_DIODE) {
+                        filtered_braids = mutated->diode_filter2.Process(braids_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_OBERHEIM) {
+                        filtered_braids = mutated->oberheim_filter2.Process(braids_output[i], cutoff2, resonance2);
+                    }
+                } else if (filter2_routing == ROUTE_PLAITS) {
+                    if (filter2_type == FILTER_MOOG) {
+                        filtered_plaits = mutated->moog_filter2.Process(plaits_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_MS20) {
+                        filtered_plaits = mutated->ms20_filter2.Process(plaits_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_TB303) {
+                        filtered_plaits = mutated->tb303_filter2.Process(plaits_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_SEM) {
+                        filtered_plaits = mutated->sem_filter2.Process(plaits_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_SALLENKEY) {
+                        filtered_plaits = mutated->sallenkey_filter2.Process(plaits_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_DIODE) {
+                        filtered_plaits = mutated->diode_filter2.Process(plaits_output[i], cutoff2, resonance2);
+                    } else if (filter2_type == FILTER_OBERHEIM) {
+                        filtered_plaits = mutated->oberheim_filter2.Process(plaits_output[i], cutoff2, resonance2);
+                    }
+                }
+                
+                braids_output[i] = filtered_braids;
+                plaits_output[i] = filtered_plaits;
+            }
+        }
+        
+        // Get panning values (0 = left, 0.5 = center, 1 = right)
+        float braids_pan = *mutated->braids_pan;
+        float plaits_pan = *mutated->plaits_pan;
+        
+        // Calculate pan gains using constant power panning
+        float braids_pan_l = cosf(braids_pan * M_PI * 0.5f);
+        float braids_pan_r = sinf(braids_pan * M_PI * 0.5f);
+        float plaits_pan_l = cosf(plaits_pan * M_PI * 0.5f);
+        float plaits_pan_r = sinf(plaits_pan * M_PI * 0.5f);
+        
+        // Get reverb parameters (use modulated values, except routing and delay which aren't modulated)
+        int reverb_routing = (int)(*mutated->reverb_routing);
+        float reverb_delay = *mutated->reverb_delay;
+        // Read base values and apply modulation
+        mod_reverb_size = *mutated->reverb_size + (mod_reverb_size - 0.5f);  // Apply modulation offset
+        mod_reverb_diffusion = *mutated->reverb_diffusion + (mod_reverb_diffusion - 0.7f);
+        mod_reverb_width = *mutated->reverb_width + (mod_reverb_width - 1.0f);
+        // Clamp again after adding base values
+        mod_reverb_size = Clip(mod_reverb_size, 0.0f, 1.0f);
+        mod_reverb_diffusion = Clip(mod_reverb_diffusion, 0.0f, 1.0f);
+        mod_reverb_width = Clip(mod_reverb_width, 0.0f, 1.0f);
+        float reverb_modulation = *mutated->reverb_modulation;
+        float reverb_gain = *mutated->reverb_gain;
+        
+        // Update reverb parameters with modulated values (not every sample for efficiency)
+        static int param_update_counter = 0;
+        if (param_update_counter++ > 480) {  // Update every ~10ms at 48kHz
+            mutated->reverb.SetParameters(mod_reverb_time, reverb_delay, mod_reverb_bass, mod_reverb_treble, mod_reverb_mix, mod_reverb_size, mod_reverb_diffusion, reverb_modulation, mod_reverb_width, reverb_gain);
+            param_update_counter = 0;
+        }
+        
+        // Mix to output (stereo) with output modulation and panning
+        for (uint32_t i = 0; i < block_size; i++) {
+            float braids_final = braids_output[i] * mod_braids_out;
+            float plaits_final = plaits_output[i] * mod_plaits_out;
+            
+            // Apply panning to each oscillator
+            float braids_l = braids_final * braids_pan_l;
+            float braids_r = braids_final * braids_pan_r;
+            float plaits_l = plaits_final * plaits_pan_l;
+            float plaits_r = plaits_final * plaits_pan_r;
+            
+            // Apply reverb based on routing (use temp variables to avoid aliasing)
+            if (reverb_routing == REVERB_BRAIDS) {
+                float temp_l, temp_r;
+                mutated->reverb.Process(braids_l, braids_r, temp_l, temp_r);
+                braids_l = temp_l;
+                braids_r = temp_r;
+            } else if (reverb_routing == REVERB_PLAITS) {
+                float temp_l, temp_r;
+                mutated->reverb.Process(plaits_l, plaits_r, temp_l, temp_r);
+                plaits_l = temp_l;
+                plaits_r = temp_r;
+            } else if (reverb_routing == REVERB_BOTH_OSC) {
+                // Sum signals first to avoid state corruption from processing reverb twice
+                float mixed_osc_l = braids_l + plaits_l;
+                float mixed_osc_r = braids_r + plaits_r;
+                float temp_l, temp_r;
+                mutated->reverb.Process(mixed_osc_l, mixed_osc_r, temp_l, temp_r);
+                
+                // Distribute reverb output back to oscillators maintaining their ratio
+                float total_l = braids_l + plaits_l;
+                float total_r = braids_r + plaits_r;
+                if (fabs(total_l) > 1e-10f) {
+                    float braids_ratio_l = braids_l / total_l;
+                    float plaits_ratio_l = plaits_l / total_l;
+                    braids_l = temp_l * braids_ratio_l;
+                    plaits_l = temp_l * plaits_ratio_l;
+                } else {
+                    braids_l = temp_l * 0.5f;
+                    plaits_l = temp_l * 0.5f;
+                }
+                if (fabs(total_r) > 1e-10f) {
+                    float braids_ratio_r = braids_r / total_r;
+                    float plaits_ratio_r = plaits_r / total_r;
+                    braids_r = temp_r * braids_ratio_r;
+                    plaits_r = temp_r * plaits_ratio_r;
+                } else {
+                    braids_r = temp_r * 0.5f;
+                    plaits_r = temp_r * 0.5f;
+                }
+            }
+            
+            // Mix and scale
+            float mixed_l = (braids_l + plaits_l) * 0.7f;
+            float mixed_r = (braids_r + plaits_r) * 0.7f;
+            
+            // Apply reverb to mixed signal (post-filter routing)
+            if (reverb_routing == REVERB_POST_FILTER) {
+                float temp_l, temp_r;
+                mutated->reverb.Process(mixed_l, mixed_r, temp_l, temp_r);
+                mixed_l = temp_l;
+                mixed_r = temp_r;
+            }
+            
+            // Soft clipping to prevent harsh clipping artifacts
+            // Use tanh for smooth saturation
+            mixed_l = tanhf(mixed_l * 2.0f) * 0.5f;
+            mixed_r = tanhf(mixed_r * 2.0f) * 0.5f;
+            
+            mutated->out_l[offset + i] = mixed_l;
+            mutated->out_r[offset + i] = mixed_r;
+        }
+        
+        offset += block_size;
+        new_trigger = false;
+    }
+}
+
+static void
+deactivate(LV2_Handle instance)
+{
+}
+
+static void
+cleanup(LV2_Handle instance)
+{
+    Mutated* mutated = (Mutated*)instance;
+    if (mutated) {
+        if (mutated->plaits_voice) {
+            delete mutated->plaits_voice;
+        }
+        free(mutated);
+    }
+}
+
+static const void*
+extension_data(const char* uri)
+{
+    return NULL;
+}
+
+static const LV2_Descriptor descriptor = {
+    MUTATED_URI,
+    instantiate,
+    connect_port,
+    activate,
+    run,
+    deactivate,
+    cleanup,
+    extension_data
+};
+
+LV2_SYMBOL_EXPORT
+const LV2_Descriptor*
+lv2_descriptor(uint32_t index)
+{
+    return index == 0 ? &descriptor : NULL;
+}
