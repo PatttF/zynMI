@@ -1,8 +1,25 @@
 /*
  * Mutated Instruments LV2 Plugin - Dear ImGui UI
  * 
- * Copyright (C) 2025 zynMI Project
- * Licensed under GPL v3
+ * Copyright (c) 2024 Mutated Instruments
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 #include <lv2/lv2plug.in/ns/lv2core/lv2.h>
@@ -52,42 +69,38 @@ const char* PLAITS_ENGINES[] = {
     "Analog hi-hat"
 };
 
-// Modulation source labels (matching TTL exactly, index 0 to 13)
+// Modulation source labels (matching TTL exactly, index 0 to 19)
 const char* MOD_SOURCES[] = {
     "None", "Braids Out", "Plaits Out", "Braids Env", "Plaits Env", "Velocity",
     "Braids Timbre", "Braids Color", "Plaits Harmonics", "Plaits Timbre", "Plaits Morph",
-    "Sine", "Saw", "PWM"
+    "Sine", "Saw", "PWM", "Braids Bitcrush", "Braids Overdrive", "Braids Ring Mod",
+    "Plaits Bitcrush", "Plaits Overdrive", "Plaits Ring Mod"
 };
 
-// Modulation target labels (matching TTL exactly, index 0 to 18)
+// Modulation target labels (matching TTL exactly, index 0 to 20)
 const char* MOD_TARGETS[] = {
     "None", "Braids Timbre", "Braids Color", "Braids FM", "Plaits Harmonics",
     "Plaits Timbre", "Plaits Morph", "Plaits LPG Decay", "Plaits LPG Colour", "Braids Pitch",
     "Plaits Pitch", "Braids Level", "Plaits Level", "Braids Out", "Plaits Out",
-    "Reverb Time", "Reverb Mix", "Reverb Bass", "Reverb Treble"
+    "Braids Bitcrush", "Braids Overdrive", "Braids Ring Mod", "Plaits Bitcrush",
+    "Plaits Overdrive", "Plaits Ring Mod"
 };
 
 // Filter type labels
 const char* FILTER_TYPES[] = {
-    "Disabled", "Lowpass", "Highpass", "Bandpass", "Notch", "Allpass", "Peak"
+    "Disabled", "Moog", "MS-20", "TB-303", "SEM", "Sallen-Key", "Diode", "Oberheim"
 };
 
 // Filter routing labels
 const char* FILTER_ROUTINGS[] = {
-    "Series", "Parallel", "Braids Only", "Plaits Only"
-};
-
-// Reverb routing labels
-const char* REVERB_ROUTINGS[] = {
-    "Off", "Braids", "Plaits", "Both", "Filter Out"
+    "Braids", "Plaits", "Both"
 };
 
 enum Tab {
     TAB_OSCILLATORS,
     TAB_MODULATION,
     TAB_FILTER1,
-    TAB_FILTER2,
-    TAB_REVERB
+    TAB_FILTER2
 };
 
 struct MutatedUI {
@@ -287,11 +300,17 @@ static void RenderOscillatorsTab(MutatedUI* ui) {
     ImGui::SameLine();
     DrawKnob(ui, "Release", 11, 0.001f, 5.0f, "%.3fs");
     ImGui::SameLine();
-    DrawKnob(ui, "Pan", 45, 0.0f, 1.0f);
+    DrawKnob(ui, "Pan", 51, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Glide", 46, 0.0f, 1.0f);
+    DrawKnob(ui, "Glide", 52, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Detune", 49, -2.0f, 2.0f);
+    DrawKnob(ui, "Detune", 55, -2.0f, 2.0f);
+    
+    DrawKnob(ui, "Bitcrush", 12, 0.0f, 1.0f);
+    ImGui::SameLine();
+    DrawKnob(ui, "Overdrive", 13, 0.0f, 1.0f);
+    ImGui::SameLine();
+    DrawKnob(ui, "Ring Mod", 14, 0.0f, 1.0f);
     
     Separator();
     ImGui::Separator();
@@ -305,39 +324,45 @@ static void RenderOscillatorsTab(MutatedUI* ui) {
     Separator();
     
     ImGui::Text("Engine");
-    DrawCombo(ui, "##Engine", 13, PLAITS_ENGINES, 17, -1);
+    DrawCombo(ui, "##Engine", 16, PLAITS_ENGINES, 17, -1);
     
     Separator();
     
-    DrawKnob(ui, "Level P", 12, 0.0f, 1.0f);
+    DrawKnob(ui, "Level P", 15, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Coarse P", 14, -24.0f, 24.0f, "%.0f");
+    DrawKnob(ui, "Coarse P", 17, -24.0f, 24.0f, "%.0f");
     ImGui::SameLine();
-    DrawKnob(ui, "Fine P", 15, -1.0f, 1.0f);
+    DrawKnob(ui, "Fine P", 18, -1.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Harmonics", 16, 0.0f, 1.0f);
+    DrawKnob(ui, "Harmonics", 19, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Timbre P", 17, 0.0f, 1.0f);
+    DrawKnob(ui, "Timbre P", 20, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Morph", 18, 0.0f, 1.0f);
+    DrawKnob(ui, "Morph", 21, 0.0f, 1.0f);
     
-    DrawKnob(ui, "LPG Decay", 19, 0.0f, 1.0f);
+    DrawKnob(ui, "LPG Decay", 22, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "LPG Color", 20, 0.0f, 1.0f);
+    DrawKnob(ui, "LPG Color", 23, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Attack P", 21, 0.001f, 2.0f, "%.3fs");
+    DrawKnob(ui, "Attack P", 24, 0.001f, 2.0f, "%.3fs");
     ImGui::SameLine();
-    DrawKnob(ui, "Decay P", 22, 0.001f, 2.0f, "%.3fs");
+    DrawKnob(ui, "Decay P", 25, 0.001f, 2.0f, "%.3fs");
     ImGui::SameLine();
-    DrawKnob(ui, "Sustain P", 23, 0.0f, 1.0f);
+    DrawKnob(ui, "Sustain P", 26, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Release P", 24, 0.001f, 5.0f, "%.3fs");
+    DrawKnob(ui, "Release P", 27, 0.001f, 5.0f, "%.3fs");
     ImGui::SameLine();
-    DrawKnob(ui, "Pan P", 47, 0.0f, 1.0f);
+    DrawKnob(ui, "Pan P", 53, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Glide P", 48, 0.0f, 1.0f);
+    DrawKnob(ui, "Glide P", 54, 0.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Detune P", 50, -2.0f, 2.0f);
+    DrawKnob(ui, "Detune P", 56, -2.0f, 2.0f);
+    
+    DrawKnob(ui, "Bitcrush P", 28, 0.0f, 1.0f);
+    ImGui::SameLine();
+    DrawKnob(ui, "Overdrive P", 29, 0.0f, 1.0f);
+    ImGui::SameLine();
+    DrawKnob(ui, "Ring Mod P", 30, 0.0f, 1.0f);
     
     ImGui::Unindent(20.0f);
     ImGui::EndChild();
@@ -360,13 +385,13 @@ static void RenderModulationTab(MutatedUI* ui) {
     ImGui::SameLine();
     ImGui::Text("Target");
     
-    DrawCombo(ui, "##Source1", 25, MOD_SOURCES, 14);
+    DrawCombo(ui, "##Source1", 31, MOD_SOURCES, 20);
     ImGui::SameLine();
-    DrawCombo(ui, "##Target1", 26, MOD_TARGETS, 19);
+    DrawCombo(ui, "##Target1", 32, MOD_TARGETS, 21);
     ImGui::SameLine();
-    DrawKnob(ui, "Amount 1", 27, -1.0f, 1.0f);
+    DrawKnob(ui, "Amount 1", 33, -1.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Detune 1", 28, -2.0f, 2.0f);
+    DrawKnob(ui, "Detune 1", 34, -2.0f, 2.0f);
     
     Separator();
     ImGui::Separator();
@@ -385,13 +410,13 @@ static void RenderModulationTab(MutatedUI* ui) {
     ImGui::SameLine();
     ImGui::Text("Target");
     
-    DrawCombo(ui, "##Source2", 29, MOD_SOURCES, 14);
+    DrawCombo(ui, "##Source2", 35, MOD_SOURCES, 20);
     ImGui::SameLine();
-    DrawCombo(ui, "##Target2", 30, MOD_TARGETS, 19);
+    DrawCombo(ui, "##Target2", 36, MOD_TARGETS, 21);
     ImGui::SameLine();
-    DrawKnob(ui, "Amount 2", 31, -1.0f, 1.0f);
+    DrawKnob(ui, "Amount 2", 37, -1.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Detune 2", 32, -2.0f, 2.0f);
+    DrawKnob(ui, "Detune 2", 38, -2.0f, 2.0f);
     
     Separator();
     ImGui::Separator();
@@ -410,13 +435,13 @@ static void RenderModulationTab(MutatedUI* ui) {
     ImGui::SameLine();
     ImGui::Text("Target");
     
-    DrawCombo(ui, "##Source3", 33, MOD_SOURCES, 14);
+    DrawCombo(ui, "##Source3", 39, MOD_SOURCES, 20);
     ImGui::SameLine();
-    DrawCombo(ui, "##Target3", 34, MOD_TARGETS, 19);
+    DrawCombo(ui, "##Target3", 40, MOD_TARGETS, 21);
     ImGui::SameLine();
-    DrawKnob(ui, "Amount 3", 35, -1.0f, 1.0f);
+    DrawKnob(ui, "Amount 3", 41, -1.0f, 1.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Detune 3", 36, -2.0f, 2.0f);
+    DrawKnob(ui, "Detune 3", 42, -2.0f, 2.0f);
     
     ImGui::Unindent(20.0f);
     ImGui::EndChild();
@@ -439,13 +464,13 @@ static void RenderFiltersTab(MutatedUI* ui) {
     ImGui::SameLine();
     ImGui::Text("Routing");
     
-    DrawCombo(ui, "##Type1", 37, FILTER_TYPES, 7);
+    DrawCombo(ui, "##Type1", 43, FILTER_TYPES, 8);
     ImGui::SameLine();
-    DrawCombo(ui, "##Routing1", 38, FILTER_ROUTINGS, 4);
+    DrawCombo(ui, "##Routing1", 44, FILTER_ROUTINGS, 3);
     ImGui::SameLine();
-    DrawKnob(ui, "Cutoff", 39, 20.0f, 20000.0f, "%.0fHz", 50.0f);
+    DrawKnob(ui, "Cutoff", 45, 20.0f, 20000.0f, "%.0fHz", 50.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Resonance", 40, 0.0f, 1.0f, "%.2f", 50.0f);
+    DrawKnob(ui, "Resonance", 46, 0.0f, 1.0f, "%.2f", 50.0f);
     
     Separator();
     ImGui::Separator();
@@ -464,51 +489,13 @@ static void RenderFiltersTab(MutatedUI* ui) {
     ImGui::SameLine();
     ImGui::Text("Routing");
     
-    DrawCombo(ui, "##Type2", 41, FILTER_TYPES, 7);
+    DrawCombo(ui, "##Type2", 47, FILTER_TYPES, 8);
     ImGui::SameLine();
-    DrawCombo(ui, "##Routing2", 42, FILTER_ROUTINGS, 4);
+    DrawCombo(ui, "##Routing2", 48, FILTER_ROUTINGS, 3);
     ImGui::SameLine();
-    DrawKnob(ui, "Cutoff F2", 43, 20.0f, 20000.0f, "%.0fHz", 50.0f);
+    DrawKnob(ui, "Cutoff F2", 49, 20.0f, 20000.0f, "%.0fHz", 50.0f);
     ImGui::SameLine();
-    DrawKnob(ui, "Resonance F2", 44, 0.0f, 1.0f, "%.2f", 50.0f);
-    
-    ImGui::Unindent(20.0f);
-    ImGui::EndChild();
-}
-
-static void RenderReverbTab(MutatedUI* ui) {
-    ImGui::BeginChild("Reverb", ImVec2(0, 0), false);
-    ImGui::Indent(20.0f);
-    
-    ImGui::PushStyleColor(ImGuiCol_Text, Colors::AccentHover);
-    ImGui::Text("NEPENTHE REVERB");
-    ImGui::PopStyleColor();
-    ImGui::Separator();
-    Separator();
-    
-    DrawKnob(ui, "Time", 52, 0.5f, 8.0f, "%.1fs", 48.0f);
-    ImGui::SameLine();
-    DrawKnob(ui, "Mix", 56, 0.0f, 1.0f, "%.2f", 48.0f);
-    ImGui::SameLine();
-    DrawKnob(ui, "Gain", 61, 0.0f, 4.0f, "%.2f", 48.0f);
-    ImGui::SameLine();
-    DrawKnob(ui, "Size", 57, 0.0f, 1.0f, "%.2f", 48.0f);
-    ImGui::SameLine();
-    DrawKnob(ui, "Diffusion", 58, 0.0f, 1.0f, "%.2f", 48.0f);
-    ImGui::SameLine();
-    DrawKnob(ui, "Modulation", 59, 0.0f, 1.0f, "%.2f", 48.0f);
-    ImGui::SameLine();
-    DrawKnob(ui, "Width", 60, 0.0f, 1.0f, "%.2f", 48.0f);
-    
-    DrawKnob(ui, "Pre-Delay", 53, 0.0f, 200.0f, "%.0fms", 48.0f);
-    ImGui::SameLine();
-    DrawKnob(ui, "Bass", 54, -1.0f, 1.0f, "%.2f", 48.0f);
-    ImGui::SameLine();
-    DrawKnob(ui, "Treble", 55, 0.0f, 1.0f, "%.2f", 48.0f);
-    
-    Separator();
-    ImGui::Text("Routing");
-    DrawCombo(ui, "##Routing", 51, REVERB_ROUTINGS, 5);
+    DrawKnob(ui, "Resonance F2", 50, 0.0f, 1.0f, "%.2f", 50.0f);
     
     ImGui::Unindent(20.0f);
     ImGui::EndChild();
@@ -541,11 +528,6 @@ static void Render(MutatedUI* ui) {
         if (ImGui::BeginTabItem("Filters")) {
             ui->current_tab = TAB_FILTER1;
             RenderFiltersTab(ui);
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Reverb")) {
-            ui->current_tab = TAB_REVERB;
-            RenderReverbTab(ui);
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -635,53 +617,46 @@ instantiate(const LV2UI_Descriptor* descriptor,
     ui->param_values[9] = 0.3f;    // Decay
     ui->param_values[10] = 0.7f;   // Sustain
     ui->param_values[11] = 0.5f;   // Release
-    ui->param_values[45] = 0.5f;   // Pan
-    ui->param_values[46] = 0.0f;   // Glide
-    ui->param_values[49] = 0.0f;   // Detune
+    ui->param_values[12] = 0.0f;   // Bitcrush
+    ui->param_values[13] = 0.0f;   // Overdrive
+    ui->param_values[14] = 0.0f;   // Ring Mod
+    ui->param_values[51] = 0.5f;   // Pan
+    ui->param_values[52] = 0.0f;   // Glide
+    ui->param_values[55] = 0.0f;   // Detune
     
     // Plaits defaults
-    ui->param_values[12] = 0.5f;   // Level
-    ui->param_values[13] = 0.0f;   // Engine
-    ui->param_values[14] = 0.0f;   // Coarse
-    ui->param_values[15] = 0.0f;   // Fine
-    ui->param_values[16] = 0.5f;   // Harmonics
-    ui->param_values[17] = 0.5f;   // Timbre
-    ui->param_values[18] = 0.5f;   // Morph
-    ui->param_values[19] = 0.5f;   // LPG Decay
-    ui->param_values[20] = 0.5f;   // LPG Color
-    ui->param_values[21] = 0.1f;   // Attack
-    ui->param_values[22] = 0.3f;   // Decay
-    ui->param_values[23] = 0.5f;   // Sustain
-    ui->param_values[24] = 0.5f;   // Release
-    ui->param_values[47] = 0.5f;   // Pan
-    ui->param_values[48] = 0.0f;   // Glide
-    ui->param_values[50] = 0.0f;   // Detune
+    ui->param_values[15] = 0.5f;   // Level
+    ui->param_values[16] = 0.0f;   // Engine
+    ui->param_values[17] = 0.0f;   // Coarse
+    ui->param_values[18] = 0.0f;   // Fine
+    ui->param_values[19] = 0.5f;   // Harmonics
+    ui->param_values[20] = 0.5f;   // Timbre
+    ui->param_values[21] = 0.5f;   // Morph
+    ui->param_values[22] = 0.5f;   // LPG Decay
+    ui->param_values[23] = 0.5f;   // LPG Color
+    ui->param_values[24] = 0.1f;   // Attack
+    ui->param_values[25] = 0.3f;   // Decay
+    ui->param_values[26] = 0.5f;   // Sustain
+    ui->param_values[27] = 0.5f;   // Release
+    ui->param_values[28] = 0.0f;   // Bitcrush
+    ui->param_values[29] = 0.0f;   // Overdrive
+    ui->param_values[30] = 0.0f;   // Ring Mod
+    ui->param_values[53] = 0.5f;   // Pan
+    ui->param_values[54] = 0.0f;   // Glide
+    ui->param_values[56] = 0.0f;   // Detune
     
     // Modulation defaults (all 0)
     // Filter 1 defaults
-    ui->param_values[37] = 0.0f;   // Type
-    ui->param_values[38] = 2.0f;   // Routing
-    ui->param_values[39] = 1.0f;   // Cutoff
-    ui->param_values[40] = 0.0f;   // Resonance
+    ui->param_values[43] = 0.0f;   // Type
+    ui->param_values[44] = 2.0f;   // Routing
+    ui->param_values[45] = 1.0f;   // Cutoff
+    ui->param_values[46] = 0.0f;   // Resonance
     
     // Filter 2 defaults
-    ui->param_values[41] = 0.0f;   // Type
-    ui->param_values[42] = 2.0f;   // Routing
-    ui->param_values[43] = 1.0f;   // Cutoff
-    ui->param_values[44] = 0.0f;   // Resonance
-    
-    // Reverb defaults
-    ui->param_values[51] = 0.0f;   // Routing
-    ui->param_values[52] = 2.2f;   // Time
-    ui->param_values[53] = 30.0f;  // Pre-Delay
-    ui->param_values[54] = 0.0f;   // Bass
-    ui->param_values[55] = 0.5f;   // Treble
-    ui->param_values[56] = 0.3f;   // Mix
-    ui->param_values[57] = 0.5f;   // Size
-    ui->param_values[58] = 0.7f;   // Diffusion
-    ui->param_values[59] = 0.5f;   // Modulation
-    ui->param_values[60] = 1.0f;   // Width
-    ui->param_values[61] = 1.5f;   // Gain
+    ui->param_values[47] = 0.0f;   // Type
+    ui->param_values[48] = 2.0f;   // Routing
+    ui->param_values[49] = 1.0f;   // Cutoff
+    ui->param_values[50] = 0.0f;   // Resonance
     
     // Find parent window from features
     for (int i = 0; features[i]; i++) {

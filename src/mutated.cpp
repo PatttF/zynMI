@@ -1,21 +1,26 @@
 /*
  * Mutated Instruments LV2 Plugin
- * Dual Oscillator (Braids + Plaits) with Modulation Matrix, Filters, and Reverb
+ * Dual Oscillator (Braids + Plaits) with Modulation Matrix and Filters
  * 
- * Copyright (C) 2025 zynMI Project
+ * Copyright (c) 2024 Mutated Instruments
  * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  * 
  * ============================================================================
  * 
@@ -30,12 +35,6 @@
  * All Mutable Instruments DSP code is licensed under the MIT License.
  * We gratefully acknowledge Émilie Gillet and Mutable Instruments for
  * their incredible contributions to open-source synthesizer design.
- * 
- * - Nepenthe Reverb Algorithm (NepentheReverb class):
- *   Original implementation by Dario Sanfilippo
- *   https://github.com/dariosanfilippo/nepenthe
- *   Licensed under GPL v3
- *   Adapted for LV2 by zynMI Project
  * 
  * The modulation matrix, filter implementations, and LFO system are
  * original work by the zynMI Project.
@@ -624,405 +623,58 @@ private:
     float hp1_, hp2_;
 };
 
-// ============================================================================
-// Nepenthe Reverb - Velvet noise based reverb algorithm
-// 
-// Original implementation by Dario Sanfilippo
-// https://github.com/dariosanfilippo/nepenthe
-// Licensed under GPL v3
-//
-// This is a standalone C++11 adaptation for LV2, based on the original
-// JUCE plugin. The core algorithm uses velvet noise (sparse random impulses)
-// to create realistic reverb with low computational cost.
-//
-// Reference files are kept in src/nepenthe_reference/ for algorithm details.
-// ============================================================================
-class NepentheReverb {
-public:
-    struct Echo {
-        int position;
-        bool sign;
-        float amplitude;
-    };
+// Enhanced bitcrusher effect with bit depth and sample rate reduction
+inline float ApplyBitcrush(float input, float amount, float& hold_sample, int& hold_counter) {
+    if (amount < 0.01f) return input;
     
-    NepentheReverb() : sample_rate_(48000.0f), data_(nullptr), data_size_(0),
-                       read_pos_(0), feedback_pos_(0), delay_buffer_(nullptr),
-                       delay_size_(0), delay_pos_(0) {}
+    // amount: 0-1, where 0 = no effect, 1 = heavy crushing
+    // Bit depth reduction: 16 bits down to 2 bits
+    float bits = 16.0f - (amount * 14.0f);
+    bits = fmax(2.0f, bits);  // At least 2 bits for better quality
+    float levels = powf(2.0f, bits);
     
-    ~NepentheReverb() {
-        if (data_) {
-            delete[] data_;
-        }
-        if (delay_buffer_) {
-            delete[] delay_buffer_;
-        }
+    // Sample rate reduction - hold samples longer as amount increases
+    int hold_time = 1 + (int)(amount * amount * 31.0f);  // 1 to 32 samples
+    
+    if (hold_counter <= 0) {
+        // Quantize the normalized audio (-1.0 to 1.0)
+        hold_sample = roundf(input * levels) / levels;
+        hold_counter = hold_time;
+    }
+    hold_counter--;
+    
+    return hold_sample;
+}
+
+// Simple overdrive/saturation effect
+inline float ApplyOverdrive(float input, float amount) {
+    if (amount < 0.01f) return input;
+    // amount: 0-1, where 0 = no effect, 1 = heavy distortion
+    float gain = 1.0f + (amount * 9.0f);  // 1x to 10x gain
+    float driven = input * gain;
+    // Soft clipping with tanh
+    return tanhf(driven) / (1.0f + amount * 0.5f);  // Compensate volume
+}
+
+// Enhanced ring modulation effect with continuous oscillator
+inline float ApplyRingMod(float input, float amount, float& mod_phase, float sample_rate) {
+    if (amount < 0.01f) return input;
+    
+    // amount: 0-1 controls frequency: 20 Hz to 1000 Hz (exponential scaling for musical range)
+    float mod_freq = 20.0f * powf(50.0f, amount);  // 20 Hz to 1000 Hz
+    
+    // Advance the modulator phase
+    mod_phase += (2.0f * M_PI * mod_freq) / sample_rate;
+    if (mod_phase >= 2.0f * M_PI) {
+        mod_phase -= 2.0f * M_PI;
     }
     
-    void Init(float sample_rate) {
-        sample_rate_ = sample_rate;
-        
-        // Constants - balanced density for smooth reverb tail
-        echoes_per_channel_ = 1500;
-        loop_seconds_ = 1.0f;
-        // Conservative gain to prevent feedback buildup
-        gain_per_echo_ = 1.5f / sqrtf(echoes_per_channel_);  // Reduced gain
-        max_delay_ms_ = 200;
-        
-        // Modulation for preventing metallic ringing
-        mod_phase_ = 0.0f;
-        mod_rate_ = 0.3f;  // Hz
-        mod_depth_ = 0.0002f;  // Very subtle
-        
-        // Calculate sizes
-        spacing_ = static_cast<int>(roundf(sample_rate_ * loop_seconds_ / echoes_per_channel_));
-        loop_length_ = spacing_ * echoes_per_channel_;
-        loop_capacity_ = loop_length_ * 2;
-        
-        // Allocate circular buffer for reverb (delete old first to prevent leak)
-        if (data_) {
-            delete[] data_;
-            data_ = nullptr;
-        }
-        data_ = new float[loop_capacity_];
-        data_size_ = loop_capacity_;
-        
-        // Allocate delay buffer (max 200ms, stereo)
-        delay_capacity_ = static_cast<int>(0.001f * sample_rate_ * max_delay_ms_) * 2 + 2;
-        if (delay_buffer_) {
-            delete[] delay_buffer_;
-            delay_buffer_ = nullptr;
-        }
-        delay_buffer_ = new float[delay_capacity_];
-        delay_size_ = delay_capacity_;
-        delay_pos_ = 0;
-        
-        // Clear buffers
-        for (int i = 0; i < data_size_; i++) {
-            data_[i] = 0.0f;
-        }
-        for (int i = 0; i < delay_size_; i++) {
-            delay_buffer_[i] = 0.0f;
-        }
-        
-        // Initialize positions
-        read_pos_ = 0;
-        feedback_pos_ = loop_length_;
-        
-        // Generate velvet noise echo patterns for stereo (different seeds for L/R stereo width)
-        GenerateEchoes(echoes_left_, 12345);
-        GenerateEchoes(echoes_right_, 54321);
-        
-        // Default parameters
-        time_ = 2.2f;  // RT60 in seconds
-        feedback_ = GetAmplitude(loop_length_);
-        mix_ = 0.5f;
-        delay_length_ = 0;
-        bass_gain_ = 0.0f;
-        treble_freq_ = 2000.0f;
-        
-        // Initialize filters
-        bass_lp_l_ = 0.0f;
-        bass_lp_r_ = 0.0f;
-        treble_lp_l_ = 0.0f;
-        treble_lp_r_ = 0.0f;
-        
-        // Initialize damping filters for more natural decay
-        damping_l_ = 0.0f;
-        damping_r_ = 0.0f;
-        
-        // Initialize diffusion all-pass filters (4 per channel for dense diffusion)
-        for (int i = 0; i < 4; i++) {
-            ap_z1_l_[i] = 0.0f;
-            ap_z1_r_[i] = 0.0f;
-        }
-        
-        // Calculate filter coefficients
-        UpdateFilters();
-    }
+    // Generate sine wave modulator
+    float modulator = sinf(mod_phase);
     
-    void SetParameters(float time, float delay_ms, float bass, float treble, float mix, float size, float diffusion, float modulation, float width, float gain) {
-        time_ = time;
-        mix_ = mix;
-        size_ = 0.5f + size * 1.5f;  // 0.5 to 2.0
-        diffusion_ = diffusion;
-        width_ = width;
-        gain_ = gain;
-        
-        // Modulation depth scaled (0-1 to 0-0.001)
-        mod_depth_ = modulation * 0.001f;
-        
-        // Adjust loop length based on size
-        int target_loop_length = static_cast<int>(loop_length_ * size_);
-        feedback_ = GetAmplitude(target_loop_length);
-        
-        // Delay in samples (stereo pairs)
-        delay_length_ = static_cast<int>(0.001f * sample_rate_ * delay_ms) * 2;
-        if (delay_length_ >= delay_capacity_) {
-            delay_length_ = delay_capacity_ - 2;
-        }
-        
-        // Bass: -1 to +1 mapped to gain adjustment
-        bass_gain_ = bass * 0.02f;  // ±2% gain per unit
-        
-        // Treble: 0 to 1 mapped to 1500Hz - 3500Hz
-        treble_freq_ = 1500.0f + treble * 2000.0f;
-        
-        UpdateFilters();
-        
-        // Update echo amplitudes
-        for (auto& echo : echoes_left_) {
-            echo.amplitude = GetAmplitude(echo.position);
-        }
-        for (auto& echo : echoes_right_) {
-            echo.amplitude = GetAmplitude(echo.position);
-        }
-    }
-    
-    void UpdateFilters() {
-        // Bass filter at 300Hz
-        float bass_freq = 300.0f;
-        bass_k_ = 1.0f - expf(-2.0f * M_PI * bass_freq / sample_rate_);
-        
-        // Treble filter (variable)
-        treble_k_ = 1.0f - expf(-2.0f * M_PI * treble_freq_ / sample_rate_);
-        
-        // Damping filter at 4kHz for natural high-frequency decay
-        float damp_freq = 4000.0f;
-        damping_k_ = 1.0f - expf(-2.0f * M_PI * damp_freq / sample_rate_);
-    }
-    
-    void Process(float input_l, float input_r, float& output_l, float& output_r) {
-        // Update modulation LFO for preventing metallic artifacts
-        mod_phase_ += mod_rate_ / sample_rate_;
-        if (mod_phase_ >= 1.0f) mod_phase_ -= 1.0f;
-        float mod_value = sinf(mod_phase_ * 2.0f * M_PI) * mod_depth_;
-        
-        // Apply pre-delay if enabled
-        float delayed_l = input_l;
-        float delayed_r = input_r;
-        
-        if (delay_length_ > 0) {
-            // Write to delay buffer
-            delay_buffer_[delay_pos_] = input_l;
-            delay_buffer_[delay_pos_ + 1] = input_r;
-            
-            // Read from delay buffer with modulation
-            float mod_offset = mod_value * sample_rate_;
-            int read_delay_pos = delay_pos_ - delay_length_ - static_cast<int>(mod_offset);
-            if (read_delay_pos < 0) read_delay_pos += delay_size_;
-            
-            delayed_l = delay_buffer_[read_delay_pos];
-            delayed_r = delay_buffer_[read_delay_pos + 1];
-            
-            // Advance delay position
-            delay_pos_ += 2;
-            if (delay_pos_ >= delay_size_) delay_pos_ = 0;
-        }
-        
-        // Apply input diffusion with all-pass filters for smoother sound
-        delayed_l = AllPass(delayed_l, 0, 0);
-        delayed_l = AllPass(delayed_l, 1, 0);
-        delayed_r = AllPass(delayed_r, 0, 1);
-        delayed_r = AllPass(delayed_r, 1, 1);
-        
-        // Write echoes for left channel (offset 0)
-        ProcessChannel(delayed_l, echoes_left_, 0);
-        
-        // Write echoes for right channel (offset 1)
-        ProcessChannel(delayed_r, echoes_right_, 1);
-        
-        // Read output and apply feedback for BOTH channels before advancing
-        // Left channel
-        int left_pos = read_pos_;
-        int left_fb_pos = feedback_pos_;
-        output_l = data_[left_pos];
-        data_[left_pos] = 0.0f;
-        
-        // Apply damping to feedback for natural high-frequency decay
-        damping_l_ += damping_k_ * (output_l - damping_l_);
-        float damped_fb_l = damping_l_;
-        data_[left_fb_pos] += damped_fb_l * feedback_;
-        
-        // Advance to next position for right channel
-        if (++read_pos_ == data_size_) read_pos_ = 0;
-        if (++feedback_pos_ == data_size_) feedback_pos_ = 0;
-        
-        // Right channel
-        int right_pos = read_pos_;
-        int right_fb_pos = feedback_pos_;
-        output_r = data_[right_pos];
-        data_[right_pos] = 0.0f;
-        
-        // Apply damping to feedback
-        damping_r_ += damping_k_ * (output_r - damping_r_);
-        float damped_fb_r = damping_r_;
-        data_[right_fb_pos] += damped_fb_r * feedback_;
-        
-        // Advance for next sample
-        if (++read_pos_ == data_size_) read_pos_ = 0;
-        if (++feedback_pos_ == data_size_) feedback_pos_ = 0;
-        
-        // Apply output diffusion for smoother tail (scaled by diffusion parameter)
-        if (diffusion_ > 0.1f) {
-            float diff_amount = diffusion_;
-            output_l = output_l * (1.0f - diff_amount) + AllPass(output_l, 2, 0) * diff_amount;
-            output_l = output_l * (1.0f - diff_amount) + AllPass(output_l, 3, 0) * diff_amount;
-            output_r = output_r * (1.0f - diff_amount) + AllPass(output_r, 2, 1) * diff_amount;
-            output_r = output_r * (1.0f - diff_amount) + AllPass(output_r, 3, 1) * diff_amount;
-        }
-        
-        // Apply EQ (bass boost/cut and treble filter)
-        // Bass: simple gain adjustment with low-shelf
-        bass_lp_l_ += bass_k_ * (output_l - bass_lp_l_);
-        bass_lp_r_ += bass_k_ * (output_r - bass_lp_r_);
-        output_l += bass_lp_l_ * bass_gain_;
-        output_r += bass_lp_r_ * bass_gain_;
-        
-        // Treble: lowpass filter
-        treble_lp_l_ += treble_k_ * (output_l - treble_lp_l_);
-        treble_lp_r_ += treble_k_ * (output_r - treble_lp_r_);
-        output_l = treble_lp_l_;
-        output_r = treble_lp_r_;
-        
-        // Apply stereo width control
-        float mid = (output_l + output_r) * 0.5f;
-        float side = (output_l - output_r) * 0.5f * width_;
-        output_l = mid + side;
-        output_r = mid - side;
-        
-        // Soft clip reverb signal to prevent harsh clipping
-        output_l = SoftClip(output_l);
-        output_r = SoftClip(output_r);
-        
-        // Apply gain with scaling to prevent excessive loudness
-        output_l *= gain_ * 0.3f;
-        output_r *= gain_ * 0.3f;
-        
-        // Apply mix
-        output_l = input_l * (1.0f - mix_) + output_l * mix_;
-        output_r = input_r * (1.0f - mix_) + output_r * mix_;
-        
-        // Final soft clip to prevent any clipping at output
-        output_l = SoftClip(output_l * 0.95f);
-        output_r = SoftClip(output_r * 0.95f);
-    }
-    
-private:
-    // All-pass filter for diffusion (creates dense echo pattern)
-    float AllPass(float input, int index, int channel) {
-        const float g = 0.5f;  // Reduced all-pass coefficient to prevent metallic sound
-        float* z1 = (channel == 0) ? &ap_z1_l_[index] : &ap_z1_r_[index];
-        
-        float output = -g * input + *z1;
-        *z1 = input + g * output;
-        
-        return output;
-    }
-    
-    void GenerateEchoes(std::vector<Echo>& echoes, unsigned int seed) {
-        echoes.clear();
-        echoes.reserve(echoes_per_channel_);
-        
-        for (int i = 0; i < echoes_per_channel_; i++) {
-            Echo echo;
-            echo.position = i * spacing_ + (Rand(seed) % spacing_);
-            echo.sign = (Rand(seed) & 1) == 0;
-            // Include sign in amplitude like original Nepenthe
-            float amp = GetAmplitude(echo.position);
-            echo.amplitude = echo.sign ? amp : -amp;
-            echoes.push_back(echo);
-        }
-    }
-    
-    unsigned int Rand(unsigned int& seed) {
-        seed = seed * 1664525u + 1013904223u;  // Linear congruential generator
-        return seed;
-    }
-    
-    float SoftClip(float x) const {
-        // Soft clipping using tanh approximation
-        if (x > 1.5f) return 1.0f;
-        if (x < -1.5f) return -1.0f;
-        return x * (1.5f - 0.166666f * x * x) / 1.5f;
-    }
-    
-    float GetAmplitude(int position) const {
-        float rt60_position = sample_rate_ * time_;
-        // Reduce amplitude to prevent feedback buildup
-        return powf(0.001f, position / rt60_position) * 0.5f;
-    }
-    
-    void ProcessChannel(float input, const std::vector<Echo>& echoes, int channel_offset) {
-        for (const Echo& echo : echoes) {
-            float gain = gain_per_echo_ * echo.amplitude;  // amplitude already includes sign
-            
-            int pos = read_pos_ + echo.position * 2 + channel_offset;  // *2 for stereo interleave, +offset for L/R
-            if (pos >= data_size_) pos -= data_size_;
-            
-            data_[pos] += gain * input;
-        }
-    }
-    
-    float sample_rate_;
-    float* data_;
-    int data_size_;
-    int read_pos_;
-    int feedback_pos_;
-    
-    // Delay line
-    float* delay_buffer_;
-    int delay_size_;
-    int delay_pos_;
-    int delay_capacity_;
-    int delay_length_;
-    int max_delay_ms_;
-    
-    int echoes_per_channel_;
-    float loop_seconds_;
-    float gain_per_echo_;
-    int spacing_;
-    int loop_length_;
-    int loop_capacity_;
-    
-    std::vector<Echo> echoes_left_;
-    std::vector<Echo> echoes_right_;
-    
-    float time_;
-    float feedback_;
-    float mix_;
-    
-    // EQ parameters
-    float bass_gain_;
-    float treble_freq_;
-    float bass_k_;
-    float treble_k_;
-    
-    // EQ state
-    float bass_lp_l_;
-    float bass_lp_r_;
-    float treble_lp_l_;
-    float treble_lp_r_;
-    
-    // Modulation (for preventing metallic artifacts)
-    float mod_phase_;
-    float mod_rate_;
-    float mod_depth_;
-    
-    // Damping (for natural high-frequency decay)
-    float damping_l_;
-    float damping_r_;
-    float damping_k_;
-    
-    // Diffusion all-pass filters (4 per channel)
-    float ap_z1_l_[4];
-    float ap_z1_r_[4];
-    
-    // Enhanced parameters
-    float size_;
-    float diffusion_;
-    float width_;
-    float gain_;
-};
+    // Ring modulation is multiplication
+    return input * modulator;
+}
 
 // LFO with multiple waveforms
 class LFO {
@@ -1039,9 +691,13 @@ public:
         phase_ = 0.0f;
     }
 
-    float Process(float rate, float shape, int waveform) {
-        // Rate: 0-1 (0.01Hz - 20Hz)
-        float freq = 0.01f + rate * 19.99f;
+    float Process(float rate_hz, float shape, int waveform) {
+        // Rate in Hz (should be passed as actual frequency)
+        // Clamp to reasonable range
+        float freq = rate_hz;
+        if (freq < 0.01f) freq = 0.01f;
+        if (freq > 100.0f) freq = 100.0f;
+        
         float phase_increment = freq / sample_rate_;
         
         phase_ += phase_increment;
@@ -1133,6 +789,9 @@ typedef enum {
     BRAIDS_DECAY,
     BRAIDS_SUSTAIN,
     BRAIDS_RELEASE,
+    BRAIDS_BITCRUSH,
+    BRAIDS_OVERDRIVE,
+    BRAIDS_RINGMOD,
     // Plaits
     PLAITS_LEVEL,
     PLAITS_ENGINE,
@@ -1147,6 +806,9 @@ typedef enum {
     PLAITS_DECAY,
     PLAITS_SUSTAIN,
     PLAITS_RELEASE,
+    PLAITS_BITCRUSH,
+    PLAITS_OVERDRIVE,
+    PLAITS_RINGMOD,
     // Modulation 1
     MOD1_SOURCE,
     MOD1_TARGET,
@@ -1180,18 +842,6 @@ typedef enum {
     // Detune (Octave shift)
     BRAIDS_DETUNE,
     PLAITS_DETUNE,
-    // Reverb
-    REVERB_ROUTING,
-    REVERB_TIME,
-    REVERB_DELAY,
-    REVERB_BASS,
-    REVERB_TREBLE,
-    REVERB_MIX,
-    REVERB_SIZE,        // Room size (0.5-2.0)
-    REVERB_DIFFUSION,   // Diffusion amount (0-1)
-    REVERB_MODULATION,  // Modulation depth (0-1)
-    REVERB_WIDTH,       // Stereo width (0-1)
-    REVERB_GAIN,        // Output gain (0-2)
     // Outputs
     MUTATED_OUT_L,
     MUTATED_OUT_R
@@ -1212,7 +862,13 @@ enum ModSource {
     MOD_SRC_PLAITS_MORPH,
     MOD_SRC_LFO_SINE,
     MOD_SRC_LFO_SAW,
-    MOD_SRC_LFO_PWM
+    MOD_SRC_LFO_PWM,
+    MOD_SRC_BRAIDS_BITCRUSH,
+    MOD_SRC_BRAIDS_OVERDRIVE,
+    MOD_SRC_BRAIDS_RINGMOD,
+    MOD_SRC_PLAITS_BITCRUSH,
+    MOD_SRC_PLAITS_OVERDRIVE,
+    MOD_SRC_PLAITS_RINGMOD
 };
 
 // Modulation targets
@@ -1232,13 +888,12 @@ enum ModTarget {
     MOD_TGT_PLAITS_LEVEL,
     MOD_TGT_BRAIDS_OUT,
     MOD_TGT_PLAITS_OUT,
-    MOD_TGT_REVERB_TIME,
-    MOD_TGT_REVERB_MIX,
-    MOD_TGT_REVERB_BASS,
-    MOD_TGT_REVERB_TREBLE,
-    MOD_TGT_REVERB_SIZE,
-    MOD_TGT_REVERB_DIFFUSION,
-    MOD_TGT_REVERB_WIDTH
+    MOD_TGT_BRAIDS_BITCRUSH,
+    MOD_TGT_BRAIDS_OVERDRIVE,
+    MOD_TGT_BRAIDS_RINGMOD,
+    MOD_TGT_PLAITS_BITCRUSH,
+    MOD_TGT_PLAITS_OVERDRIVE,
+    MOD_TGT_PLAITS_RINGMOD
 };
 
 // Filter types
@@ -1260,15 +915,6 @@ enum FilterRouting {
     ROUTE_BOTH
 };
 
-// Reverb routing
-enum ReverbRouting {
-    REVERB_OFF = 0,
-    REVERB_BRAIDS,
-    REVERB_PLAITS,
-    REVERB_BOTH_OSC,
-    REVERB_POST_FILTER
-};
-
 typedef struct {
     // Port buffers
     const LV2_Atom_Sequence* midi_in;
@@ -1283,6 +929,9 @@ typedef struct {
     const float* braids_decay;
     const float* braids_sustain;
     const float* braids_release;
+    const float* braids_bitcrush;
+    const float* braids_overdrive;
+    const float* braids_ringmod;
     const float* plaits_level;
     const float* plaits_engine;
     const float* plaits_coarse;
@@ -1296,6 +945,9 @@ typedef struct {
     const float* plaits_decay;
     const float* plaits_sustain;
     const float* plaits_release;
+    const float* plaits_bitcrush;
+    const float* plaits_overdrive;
+    const float* plaits_ringmod;
     const float* mod1_source;
     const float* mod1_target;
     const float* mod1_amount;
@@ -1322,17 +974,6 @@ typedef struct {
     const float* plaits_glide;
     const float* braids_detune;
     const float* plaits_detune;
-    const float* reverb_routing;
-    const float* reverb_time;
-    const float* reverb_delay;
-    const float* reverb_bass;
-    const float* reverb_treble;
-    const float* reverb_mix;
-    const float* reverb_size;
-    const float* reverb_diffusion;
-    const float* reverb_modulation;
-    const float* reverb_width;
-    const float* reverb_gain;
     float* out_l;
     float* out_r;
     
@@ -1397,8 +1038,15 @@ typedef struct {
     int previous_braids_shape;
     int previous_plaits_engine;
     
-    // Reverb
-    NepentheReverb reverb;
+    // Bitcrusher state
+    float braids_bitcrush_hold;
+    int braids_bitcrush_counter;
+    float plaits_bitcrush_hold;
+    int plaits_bitcrush_counter;
+    
+    // Ring modulator phase
+    float braids_ringmod_phase;
+    float plaits_ringmod_phase;
     
     double sample_rate;
 } Mutated;
@@ -1490,12 +1138,17 @@ instantiate(const LV2_Descriptor* descriptor,
     mutated->previous_braids_shape = -1;
     mutated->previous_plaits_engine = -1;
     
+    // Initialize effects state
+    mutated->braids_bitcrush_hold = 0.0f;
+    mutated->braids_bitcrush_counter = 0;
+    mutated->plaits_bitcrush_hold = 0.0f;
+    mutated->plaits_bitcrush_counter = 0;
+    mutated->braids_ringmod_phase = 0.0f;
+    mutated->plaits_ringmod_phase = 0.0f;
+    
     // Initialize glide
     mutated->braids_current_note = 60.0f;
     mutated->plaits_current_note = 60.0f;
-    
-    // Initialize reverb
-    mutated->reverb.Init(rate);
     
     return (LV2_Handle)mutated;
 }
@@ -1542,6 +1195,15 @@ connect_port(LV2_Handle instance, uint32_t port, void* data)
         case BRAIDS_RELEASE:
             mutated->braids_release = (const float*)data;
             break;
+        case BRAIDS_BITCRUSH:
+            mutated->braids_bitcrush = (const float*)data;
+            break;
+        case BRAIDS_OVERDRIVE:
+            mutated->braids_overdrive = (const float*)data;
+            break;
+        case BRAIDS_RINGMOD:
+            mutated->braids_ringmod = (const float*)data;
+            break;
         case PLAITS_LEVEL:
             mutated->plaits_level = (const float*)data;
             break;
@@ -1580,6 +1242,15 @@ connect_port(LV2_Handle instance, uint32_t port, void* data)
             break;
         case PLAITS_RELEASE:
             mutated->plaits_release = (const float*)data;
+            break;
+        case PLAITS_BITCRUSH:
+            mutated->plaits_bitcrush = (const float*)data;
+            break;
+        case PLAITS_OVERDRIVE:
+            mutated->plaits_overdrive = (const float*)data;
+            break;
+        case PLAITS_RINGMOD:
+            mutated->plaits_ringmod = (const float*)data;
             break;
         case MOD1_SOURCE:
             mutated->mod1_source = (const float*)data;
@@ -1659,39 +1330,6 @@ connect_port(LV2_Handle instance, uint32_t port, void* data)
         case PLAITS_DETUNE:
             mutated->plaits_detune = (const float*)data;
             break;
-        case REVERB_ROUTING:
-            mutated->reverb_routing = (const float*)data;
-            break;
-        case REVERB_TIME:
-            mutated->reverb_time = (const float*)data;
-            break;
-        case REVERB_DELAY:
-            mutated->reverb_delay = (const float*)data;
-            break;
-        case REVERB_BASS:
-            mutated->reverb_bass = (const float*)data;
-            break;
-        case REVERB_TREBLE:
-            mutated->reverb_treble = (const float*)data;
-            break;
-        case REVERB_MIX:
-            mutated->reverb_mix = (const float*)data;
-            break;
-        case REVERB_SIZE:
-            mutated->reverb_size = (const float*)data;
-            break;
-        case REVERB_DIFFUSION:
-            mutated->reverb_diffusion = (const float*)data;
-            break;
-        case REVERB_MODULATION:
-            mutated->reverb_modulation = (const float*)data;
-            break;
-        case REVERB_WIDTH:
-            mutated->reverb_width = (const float*)data;
-            break;
-        case REVERB_GAIN:
-            mutated->reverb_gain = (const float*)data;
-            break;
         case MUTATED_OUT_L:
             mutated->out_l = (float*)data;
             break;
@@ -1722,6 +1360,12 @@ static float get_mod_source(Mutated* mutated, int source) {
         case MOD_SRC_LFO_SINE: return mutated->lfo_sine_value;
         case MOD_SRC_LFO_SAW: return mutated->lfo_saw_value;
         case MOD_SRC_LFO_PWM: return mutated->lfo_pwm_value;
+        case MOD_SRC_BRAIDS_BITCRUSH: return *mutated->braids_bitcrush;
+        case MOD_SRC_BRAIDS_OVERDRIVE: return *mutated->braids_overdrive;
+        case MOD_SRC_BRAIDS_RINGMOD: return *mutated->braids_ringmod;
+        case MOD_SRC_PLAITS_BITCRUSH: return *mutated->plaits_bitcrush;
+        case MOD_SRC_PLAITS_OVERDRIVE: return *mutated->plaits_overdrive;
+        case MOD_SRC_PLAITS_RINGMOD: return *mutated->plaits_ringmod;
         default: return 0.0f;
     }
 }
@@ -1778,8 +1422,8 @@ run(LV2_Handle instance, uint32_t n_samples)
     }
     
     // Calculate LFO rates based on active modulation slots using them
-    // Base rate: 0.2 Hz (5 second cycle)
-    // Detune/Speed parameter maps to rate multiplier: -1 to 1 -> 0.1x to 10x
+    // Base rate: 2.0 Hz (0.5 second cycle)
+    // Detune/Speed parameter maps to rate multiplier: -1 to 1 -> 0.01x to 100x
     float sine_max_speed = 0.0f;
     float saw_max_speed = 0.0f;
     float pwm_max_speed = 0.0f;
@@ -1793,9 +1437,9 @@ run(LV2_Handle instance, uint32_t n_samples)
         int source = (int)(*src_param);
         float detune = *det_param;
         
-        // Map detune (-1 to 1) to speed multiplier (0.1x to 10x)
+        // Map detune (-1 to 1) to speed multiplier (0.01x to 100x)
         // 0 = 1x (base rate), negative = slower, positive = faster
-        float speed_mult = powf(10.0f, detune);  // 10^detune gives 0.1 to 10 range
+        float speed_mult = powf(100.0f, detune);  // 100^detune gives 0.01 to 100 range
         
         if (source == MOD_SRC_LFO_SINE && speed_mult > sine_max_speed) {
             sine_max_speed = speed_mult;
@@ -1814,9 +1458,9 @@ run(LV2_Handle instance, uint32_t n_samples)
     if (pwm_max_speed == 0.0f) pwm_max_speed = 1.0f;
     
     // Update LFO rates
-    mutated->lfo_sine_rate = 0.2f * sine_max_speed;
-    mutated->lfo_saw_rate = 0.2f * saw_max_speed;
-    mutated->lfo_pwm_rate = 0.2f * pwm_max_speed;
+    mutated->lfo_sine_rate = 2.0f * sine_max_speed;
+    mutated->lfo_saw_rate = 2.0f * saw_max_speed;
+    mutated->lfo_pwm_rate = 2.0f * pwm_max_speed;
     
     // Get parameters
     int braids_shape = (int)(*mutated->braids_shape);
@@ -1853,10 +1497,6 @@ run(LV2_Handle instance, uint32_t n_samples)
     float base_plaits_lpg_decay = *mutated->plaits_lpg_decay;
     float base_plaits_lpg_colour = *mutated->plaits_lpg_colour;
     float base_plaits_level = *mutated->plaits_level;
-    float base_reverb_time = *mutated->reverb_time;
-    float base_reverb_mix = *mutated->reverb_mix;
-    float base_reverb_bass = *mutated->reverb_bass;
-    float base_reverb_treble = *mutated->reverb_treble;
     
     // Process in 24-sample blocks
     uint32_t offset = 0;
@@ -1867,9 +1507,12 @@ run(LV2_Handle instance, uint32_t n_samples)
         }
         
         // Update LFOs at control rate (once per 24-sample block)
-        mutated->lfo_sine_value = mutated->lfo_sine.Process(mutated->lfo_sine_rate, 0.5f, 0);   // Sine
-        mutated->lfo_saw_value = mutated->lfo_saw.Process(mutated->lfo_saw_rate, 0.5f, 2);      // Sawtooth
-        mutated->lfo_pwm_value = mutated->lfo_pwm.Process(mutated->lfo_pwm_rate, 0.5f, 4);      // Square/PWM
+        // Process LFO 24 times to account for block size
+        for (int i = 0; i < 24; i++) {
+            mutated->lfo_sine_value = mutated->lfo_sine.Process(mutated->lfo_sine_rate, 0.5f, 0);   // Sine
+            mutated->lfo_saw_value = mutated->lfo_saw.Process(mutated->lfo_saw_rate, 0.5f, 2);      // Sawtooth
+            mutated->lfo_pwm_value = mutated->lfo_pwm.Process(mutated->lfo_pwm_rate, 0.5f, 4);      // Square/PWM
+        }
         
         // Apply modulation (per-block)
         float mod_braids_timbre = base_braids_timbre;
@@ -1878,6 +1521,9 @@ run(LV2_Handle instance, uint32_t n_samples)
         float mod_braids_pitch = 0.0f;
         float mod_braids_level = base_braids_level;
         float mod_braids_out = 1.0f;  // Output scaling
+        float mod_braids_bitcrush = *mutated->braids_bitcrush;
+        float mod_braids_overdrive = *mutated->braids_overdrive;
+        float mod_braids_ringmod = *mutated->braids_ringmod;
         float mod_plaits_harmonics = base_plaits_harmonics;
         float mod_plaits_timbre = base_plaits_timbre;
         float mod_plaits_morph = base_plaits_morph;
@@ -1886,13 +1532,9 @@ run(LV2_Handle instance, uint32_t n_samples)
         float mod_plaits_pitch = 0.0f;
         float mod_plaits_level = base_plaits_level;
         float mod_plaits_out = 1.0f;  // Output scaling
-        float mod_reverb_time = base_reverb_time;
-        float mod_reverb_mix = base_reverb_mix;
-        float mod_reverb_bass = base_reverb_bass;
-        float mod_reverb_treble = base_reverb_treble;
-        float mod_reverb_size = 0.5f;  // Will be read from parameter later
-        float mod_reverb_diffusion = 0.7f;
-        float mod_reverb_width = 1.0f;
+        float mod_plaits_bitcrush = *mutated->plaits_bitcrush;
+        float mod_plaits_overdrive = *mutated->plaits_overdrive;
+        float mod_plaits_ringmod = *mutated->plaits_ringmod;
         
         // Process modulation slots
         for (int mod_slot = 0; mod_slot < 3; mod_slot++) {
@@ -1920,6 +1562,9 @@ run(LV2_Handle instance, uint32_t n_samples)
                     case MOD_TGT_BRAIDS_PITCH: mod_braids_pitch += detune * mod_value * 12.0f; break;
                     case MOD_TGT_BRAIDS_LEVEL: mod_braids_level += mod_value; break;
                     case MOD_TGT_BRAIDS_OUT: mod_braids_out += mod_value; break;
+                    case MOD_TGT_BRAIDS_BITCRUSH: mod_braids_bitcrush += mod_value; break;
+                    case MOD_TGT_BRAIDS_OVERDRIVE: mod_braids_overdrive += mod_value; break;
+                    case MOD_TGT_BRAIDS_RINGMOD: mod_braids_ringmod += mod_value; break;
                     case MOD_TGT_PLAITS_HARMONICS: mod_plaits_harmonics += mod_value; break;
                     case MOD_TGT_PLAITS_TIMBRE: mod_plaits_timbre += mod_value; break;
                     case MOD_TGT_PLAITS_MORPH: mod_plaits_morph += mod_value; break;
@@ -1928,13 +1573,9 @@ run(LV2_Handle instance, uint32_t n_samples)
                     case MOD_TGT_PLAITS_PITCH: mod_plaits_pitch += detune * mod_value * 12.0f; break;
                     case MOD_TGT_PLAITS_LEVEL: mod_plaits_level += mod_value; break;
                     case MOD_TGT_PLAITS_OUT: mod_plaits_out += mod_value; break;
-                    case MOD_TGT_REVERB_TIME: mod_reverb_time += mod_value * 7.5f; break;  // Scale to 0.5-8.0s range
-                    case MOD_TGT_REVERB_MIX: mod_reverb_mix += mod_value; break;
-                    case MOD_TGT_REVERB_BASS: mod_reverb_bass += mod_value * 2.0f; break;  // Scale to -1.0 to +1.0 range
-                    case MOD_TGT_REVERB_TREBLE: mod_reverb_treble += mod_value; break;
-                    case MOD_TGT_REVERB_SIZE: mod_reverb_size += mod_value; break;
-                    case MOD_TGT_REVERB_DIFFUSION: mod_reverb_diffusion += mod_value; break;
-                    case MOD_TGT_REVERB_WIDTH: mod_reverb_width += mod_value; break;
+                    case MOD_TGT_PLAITS_BITCRUSH: mod_plaits_bitcrush += mod_value; break;
+                    case MOD_TGT_PLAITS_OVERDRIVE: mod_plaits_overdrive += mod_value; break;
+                    case MOD_TGT_PLAITS_RINGMOD: mod_plaits_ringmod += mod_value; break;
                 }
             }
         }
@@ -1944,20 +1585,19 @@ run(LV2_Handle instance, uint32_t n_samples)
         mod_braids_color = Clip(mod_braids_color, 0.0f, 1.0f);
         mod_braids_level = Clip(mod_braids_level, 0.0f, 1.0f);
         mod_braids_out = Clip(mod_braids_out, 0.0f, 2.0f);  // Allow up to 2x boost
+        mod_braids_bitcrush = Clip(mod_braids_bitcrush, 0.0f, 1.0f);
+        mod_braids_overdrive = Clip(mod_braids_overdrive, 0.0f, 1.0f);
+        mod_braids_ringmod = Clip(mod_braids_ringmod, 0.0f, 1.0f);
         mod_plaits_harmonics = Clip(mod_plaits_harmonics, 0.0f, 1.0f);
         mod_plaits_timbre = Clip(mod_plaits_timbre, 0.0f, 1.0f);
         mod_plaits_morph = Clip(mod_plaits_morph, 0.0f, 1.0f);
         mod_plaits_lpg_decay = Clip(mod_plaits_lpg_decay, 0.0f, 1.0f);
         mod_plaits_lpg_colour = Clip(mod_plaits_lpg_colour, 0.0f, 1.0f);
         mod_plaits_level = Clip(mod_plaits_level, 0.0f, 1.0f);
+        mod_plaits_bitcrush = Clip(mod_plaits_bitcrush, 0.0f, 1.0f);
+        mod_plaits_overdrive = Clip(mod_plaits_overdrive, 0.0f, 1.0f);
+        mod_plaits_ringmod = Clip(mod_plaits_ringmod, 0.0f, 1.0f);
         mod_plaits_out = Clip(mod_plaits_out, 0.0f, 2.0f);  // Allow up to 2x boost
-        mod_reverb_time = Clip(mod_reverb_time, 0.5f, 8.0f);
-        mod_reverb_mix = Clip(mod_reverb_mix, 0.0f, 1.0f);
-        mod_reverb_bass = Clip(mod_reverb_bass, -1.0f, 1.0f);
-        mod_reverb_treble = Clip(mod_reverb_treble, 0.0f, 1.0f);
-        mod_reverb_size = Clip(mod_reverb_size, 0.0f, 1.0f);
-        mod_reverb_diffusion = Clip(mod_reverb_diffusion, 0.0f, 1.0f);
-        mod_reverb_width = Clip(mod_reverb_width, 0.0f, 1.0f);
         
         // Apply glide (portamento) to notes
         float braids_target_note = (float)mutated->current_note;
@@ -2029,6 +1669,16 @@ run(LV2_Handle instance, uint32_t n_samples)
                 }
                 // Store average absolute value for modulation
                 mutated->braids_raw_output = sum_abs / block_size;
+                
+                // Apply Braids effects (using modulated values)
+                for (uint32_t i = 0; i < block_size; i++) {
+                    float sample = braids_output[i];
+                    // Apply effects in order: overdrive -> bitcrush -> ring mod
+                    sample = ApplyOverdrive(sample, mod_braids_overdrive);
+                    sample = ApplyBitcrush(sample, mod_braids_bitcrush, mutated->braids_bitcrush_hold, mutated->braids_bitcrush_counter);
+                    sample = ApplyRingMod(sample, mod_braids_ringmod, mutated->braids_ringmod_phase, mutated->sample_rate);
+                    braids_output[i] = sample;
+                }
             }
         }
         
@@ -2084,6 +1734,16 @@ run(LV2_Handle instance, uint32_t n_samples)
                 }
                 // Store average absolute value for modulation
                 mutated->plaits_raw_output = sum_abs / block_size;
+                
+                // Apply Plaits effects (using modulated values)
+                for (uint32_t i = 0; i < block_size; i++) {
+                    float sample = plaits_output[i];
+                    // Apply effects in order: overdrive -> bitcrush -> ring mod
+                    sample = ApplyOverdrive(sample, mod_plaits_overdrive);
+                    sample = ApplyBitcrush(sample, mod_plaits_bitcrush, mutated->plaits_bitcrush_hold, mutated->plaits_bitcrush_counter);
+                    sample = ApplyRingMod(sample, mod_plaits_ringmod, mutated->plaits_ringmod_phase, mutated->sample_rate);
+                    plaits_output[i] = sample;
+                }
             }
         }
         
@@ -2263,27 +1923,6 @@ run(LV2_Handle instance, uint32_t n_samples)
         float plaits_pan_l = cosf(plaits_pan * M_PI * 0.5f);
         float plaits_pan_r = sinf(plaits_pan * M_PI * 0.5f);
         
-        // Get reverb parameters (use modulated values, except routing and delay which aren't modulated)
-        int reverb_routing = (int)(*mutated->reverb_routing);
-        float reverb_delay = *mutated->reverb_delay;
-        // Read base values and apply modulation
-        mod_reverb_size = *mutated->reverb_size + (mod_reverb_size - 0.5f);  // Apply modulation offset
-        mod_reverb_diffusion = *mutated->reverb_diffusion + (mod_reverb_diffusion - 0.7f);
-        mod_reverb_width = *mutated->reverb_width + (mod_reverb_width - 1.0f);
-        // Clamp again after adding base values
-        mod_reverb_size = Clip(mod_reverb_size, 0.0f, 1.0f);
-        mod_reverb_diffusion = Clip(mod_reverb_diffusion, 0.0f, 1.0f);
-        mod_reverb_width = Clip(mod_reverb_width, 0.0f, 1.0f);
-        float reverb_modulation = *mutated->reverb_modulation;
-        float reverb_gain = *mutated->reverb_gain;
-        
-        // Update reverb parameters with modulated values (not every sample for efficiency)
-        static int param_update_counter = 0;
-        if (param_update_counter++ > 480) {  // Update every ~10ms at 48kHz
-            mutated->reverb.SetParameters(mod_reverb_time, reverb_delay, mod_reverb_bass, mod_reverb_treble, mod_reverb_mix, mod_reverb_size, mod_reverb_diffusion, reverb_modulation, mod_reverb_width, reverb_gain);
-            param_update_counter = 0;
-        }
-        
         // Mix to output (stereo) with output modulation and panning
         for (uint32_t i = 0; i < block_size; i++) {
             float braids_final = braids_output[i] * mod_braids_out;
@@ -2295,58 +1934,9 @@ run(LV2_Handle instance, uint32_t n_samples)
             float plaits_l = plaits_final * plaits_pan_l;
             float plaits_r = plaits_final * plaits_pan_r;
             
-            // Apply reverb based on routing (use temp variables to avoid aliasing)
-            if (reverb_routing == REVERB_BRAIDS) {
-                float temp_l, temp_r;
-                mutated->reverb.Process(braids_l, braids_r, temp_l, temp_r);
-                braids_l = temp_l;
-                braids_r = temp_r;
-            } else if (reverb_routing == REVERB_PLAITS) {
-                float temp_l, temp_r;
-                mutated->reverb.Process(plaits_l, plaits_r, temp_l, temp_r);
-                plaits_l = temp_l;
-                plaits_r = temp_r;
-            } else if (reverb_routing == REVERB_BOTH_OSC) {
-                // Sum signals first to avoid state corruption from processing reverb twice
-                float mixed_osc_l = braids_l + plaits_l;
-                float mixed_osc_r = braids_r + plaits_r;
-                float temp_l, temp_r;
-                mutated->reverb.Process(mixed_osc_l, mixed_osc_r, temp_l, temp_r);
-                
-                // Distribute reverb output back to oscillators maintaining their ratio
-                float total_l = braids_l + plaits_l;
-                float total_r = braids_r + plaits_r;
-                if (fabs(total_l) > 1e-10f) {
-                    float braids_ratio_l = braids_l / total_l;
-                    float plaits_ratio_l = plaits_l / total_l;
-                    braids_l = temp_l * braids_ratio_l;
-                    plaits_l = temp_l * plaits_ratio_l;
-                } else {
-                    braids_l = temp_l * 0.5f;
-                    plaits_l = temp_l * 0.5f;
-                }
-                if (fabs(total_r) > 1e-10f) {
-                    float braids_ratio_r = braids_r / total_r;
-                    float plaits_ratio_r = plaits_r / total_r;
-                    braids_r = temp_r * braids_ratio_r;
-                    plaits_r = temp_r * plaits_ratio_r;
-                } else {
-                    braids_r = temp_r * 0.5f;
-                    plaits_r = temp_r * 0.5f;
-                }
-            }
-            
             // Mix and scale
             float mixed_l = (braids_l + plaits_l) * 0.7f;
             float mixed_r = (braids_r + plaits_r) * 0.7f;
-            
-            // Apply reverb to mixed signal (post-filter routing)
-            if (reverb_routing == REVERB_POST_FILTER) {
-                float temp_l, temp_r;
-                mutated->reverb.Process(mixed_l, mixed_r, temp_l, temp_r);
-                mixed_l = temp_l;
-                mixed_r = temp_r;
-            }
             
             // Soft clipping to prevent harsh clipping artifacts
             // Use tanh for smooth saturation
@@ -2402,3 +1992,4 @@ lv2_descriptor(uint32_t index)
 {
     return index == 0 ? &descriptor : NULL;
 }
+
