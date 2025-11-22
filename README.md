@@ -1,6 +1,6 @@
 # Zynthian & VST plugins
 
-zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instruments, Marbles random generator, and Chaos Engine rhythm generator. Thanks go out to Mutable Instruments and Zynthian. 
+zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instruments, Chaos Engine random generator, and Mutated Sequences rhythm generator. Thanks go out to Mutable Instruments and Zynthian. 
 
 
 
@@ -23,6 +23,12 @@ zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instrume
 - **LPG (Low Pass Gate)**: Adds vactrol-style dynamics and filtering
 
 This design enables rich, evolving timbres through cross-modulation between oscillators, rhythmic modulation from the LFO, and dynamic envelope control over multiple parameters simultaneously.
+### VST3 Features
+
+- **OpenGL-based UI**: Modern tabbed interface with background image
+- **Cross-platform**: Native Linux and Windows (MinGW cross-compiled)
+- **Real-time Control**: Full parameter automation and MIDI learn support
+- **Preset Management**: Save/load presets with embedded state
 
 ### Use Cases
 
@@ -35,7 +41,7 @@ This design enables rich, evolving timbres through cross-modulation between osci
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ### About Chaos Engine
 
-- **MIDI random generator** with host tempo sync
+- **MIDI random generator** port of Mutated Instruments Marbles with host tempo sync
 - **T outputs**: 3 channels of random gates (T1, T2, T3 as MIDI notes 60, 61, 62)
   - **T1**: Random slave gate derived from T2 (slave channel 0)
   - **T2**: Master clock with jitter control (the main rhythmic clock)
@@ -49,3 +55,50 @@ This design enables rich, evolving timbres through cross-modulation between osci
   - Spread, Bias, Steps controls
   - Voltage ranges: ±2V, 0-5V, ±5V
   - Control modes: Identical, Bump, Tilt
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## About Mutated Sequences
+
+**Mutated Sequences** is a DFAM-inspired 8-step MIDI rhythm sequencer with per-step pitch, velocity, probability, and ratcheting. Create complex drum patterns, melodic sequences, and generative rhythms with extensive creative controls. Available for Zynthian with full MIDI output capabilities.
+
+### Sequencer Features
+
+- **8-step sequencer** with individual control per step:
+  - **Pitch**: MIDI note (0-127)
+  - **Velocity**: Note velocity (0-127)
+  - **Probability**: Step trigger probability (0-100%)
+  - **Ratchet**: Repeat count per step (1-8)
+- **Global Controls**:
+  - **Clock Source**: Internal, MIDI Clock, or Host Tempo sync
+  - **BPM**: Internal clock tempo (20-300 BPM)
+  - **Clock Division**: 1/4, 1/8, 1/16, 1/32 notes
+  - **Swing**: Groove timing (0-100%)
+  - **Gate Length**: Note duration as % of step
+  - **Num Steps**: Active sequence length (1-8)
+  - **Transpose**: Global pitch offset (-24 to +24 semitones)
+
+### Creative Controls
+
+- **Pattern Modes**: 10 rhythm formulas/patterns with tweakable parameter
+- **Velocity Modes**:
+  - Manual (per-step control)
+  - Accent (emphasize certain beats)
+  - Ramp Up/Down (dynamic curves)
+  - Random (generative variation)
+- **Pitch Modes**:
+  - Manual (per-step control)
+  - Euclidean (algorithmic distribution)
+  - Pentatonic/Chromatic scales
+- **Generative Features**:
+  - **Probability**: Global gate probability control
+  - **Humanize**: Timing variation (0-100%)
+  - **Mutate**: Random parameter changes on loop (0-100%)
+  - **Pitch Spread**: Range for generative pitch modes
+
+### Use Cases
+
+- **Drum programming**: Create complex rhythm patterns with ratchets and probability
+- **Melodic sequences**: Step-sequenced basslines and melodies with scale quantization
+- **Generative music**: Use probability, humanize, and mutate for evolving patterns
+- **Live performance**: Real-time pattern tweaking with creative controls
+- **Polyrhythms**: Variable step lengths (1-8) create complex metric relationships
