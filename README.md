@@ -1,38 +1,7 @@
-# Zynthian & Linux LV2 Plugins
+# Zynthian & VST plugins
 
-ARM64(for Zynthian) and Linux x86-64 LV2 plugins featuring Plaits and Braids macro oscillators  Marbles random generator. Thanks go out to Mutable Instruments and Zynthian. 
+zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instruments, Marbles random generator, and Chaos Engine rhythm generator. Thanks go out to Mutable Instruments and Zynthian. 
 
-## Building
-
-```bash
-# Build all plugins for both x86_64 (testing) and aarch64 (Zynthian)
-make all
-
-# Build for specific architecture
-make x86_64    # Native testing
-make aarch64   # Zynthian ARM64
-
-# Build individual plugins
-make 
-make marbles
-make mutated
-
-# Verify bundles
-make verify
-
-# Clean build artifacts
-make clean
-```
-
-## Deployment to Zynthian
-
-```bash
-# Deploy to Zynthian
-scp -r aarch64-build/*.lv2 root@zynthian.local:/zynthian/zynthian-plugins/lv2/
-
-# Or use the shortcut
-make install  # Shows the deploy command
-```
 
 
 
