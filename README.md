@@ -13,8 +13,7 @@ make x86_64    # Native testing
 make aarch64   # Zynthian ARM64
 
 # Build individual plugins
-make plaits
-make braids
+make 
 make marbles
 make mutated
 
