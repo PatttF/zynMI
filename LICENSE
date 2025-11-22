@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2024 Mutated Instruments
+Copyright (c) 2025 Mutated Instruments
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,6 @@ This project incorporates code from Mutable Instruments Eurorack modules:
 - Braids: Macro Oscillator
 - Plaits: Macro Oscillator 2
 - Rings: Resonator
-- Stages: Segment Generator
 
 The original Mutable Instruments code is licensed under the MIT License.
 Copyright (c) 2012-2020 Emilie Gillet (emilie.o.gillet@gmail.com)
