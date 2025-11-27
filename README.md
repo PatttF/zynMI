@@ -17,7 +17,7 @@ zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instrume
   - Pre-filter mixer with A/B balance and independent level controls
   - Post-filter master mixer
 - **Shared Processing**:
-  - 7 filter types (Moog Ladder, MS20, SVF LP/BP/HP, One-Pole LP)
+  - 4 filter types
   - Full ADSR envelope with shape controls
   - LFO with 5 waveforms and tempo sync
 - **LPG (Low Pass Gate)**: Adds vactrol-style dynamics and filtering
