@@ -7,28 +7,25 @@ zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instrume
 
 ## About Mutated Instruments
 
-**Mutated Instruments** is a custom dual-oscillator synthesizer plugin that combines Mutable Instruments Braids and Plaits macro oscillators with a powerful 4x4 modulation matrix, dual mixers, filters, and full envelope/LFO control. It was created to provide complex modulation routing and sound design capabilities not found in the standalone Braids or Plaits plugins.
+**Mutated Instruments** is a custom dual-oscillator synthesizer plugin that combines Mutable Instruments Braids and Plaits macro oscillators with a powerful 4x4 modulation matrix, dual mixers, filters, full envelope/LFO control, and several effects. It was created to provide complex modulation routing and sound design capabilities not found in the standalone Braids or Plaits plugins.
 
 ### Architecture
 
-- **Two Independent Oscillators (Braids and Plaits)**
-- **4x4 Modulation Matrix**: Route any of 4 sources (OSC A output, OSC B output, ADSR Envelope, LFO) to any of 4 destinations per oscillator (Pitch, Timbre, Color, Shape) with individual depth controls
-- **Dual Mixer System**:
-  - Pre-filter mixer with A/B balance and independent level controls
-  - Post-filter master mixer
+- **Two Independent Oscillators (Braids and Plaits) with all engines and controls**
+  - Per oscillator effects (Ring Mod, Bit Crusher) and Overdrive
+- **4x4 Modulation Matrix**: Route or sync any source (OSC A output, OSC B output, ADSR Envelope, LFO, etc...) to any destination with individual depth controls or sync controls.
 - **Shared Processing**:
   - 4 filter types
-  - Full ADSR envelope with shape controls
+  - Full ADSR envelope controls
   - LFO with 5 waveforms and tempo sync
-- **LPG (Low Pass Gate)**: Adds vactrol-style dynamics and filtering
+  - 4 different very powerful global effects (Reverb, Delay, Tape, and Glitch)
 
-This design enables rich, evolving timbres through cross-modulation between oscillators, rhythmic modulation from the LFO, and dynamic envelope control over multiple parameters simultaneously.
+This design enables rich, evolving timbres through cross-modulation between oscillators, rhythmic modulation from the LFO, dynamic envelope control over multiple parameters simultaneously, and a million ways to destroy and tweak it all with effects.
 ### VST3 Features
 
-- **OpenGL-based UI**: Modern tabbed interface with background image
-- **Cross-platform**: Native Linux and Windows (MinGW cross-compiled)
+- **OpenGL-based UI**: Modern tabbed interface with background image and audio reactive effects
+- **Cross-platform**: Native Linux, Windows, Mac, and Zynthian
 - **Real-time Control**: Full parameter automation and MIDI learn support
-- **Preset Management**: Save/load presets with embedded state
 
 ### Use Cases
 
