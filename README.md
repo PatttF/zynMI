@@ -7,7 +7,7 @@ zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instrume
 
 ## About Mutated Instruments
 
-**Mutated Instruments** is a custom dual-oscillator synthesizer plugin that combines Mutable Instruments Braids and Plaits macro oscillators with a powerful 4x4 modulation matrix, dual mixers, filters, full envelope/LFO control, and several effects. It was created to provide complex modulation routing and sound design capabilities not found in the standalone Braids or Plaits plugins.
+**Mutated Instruments** is a custom dual-oscillator synthesizer plugin that combines Mutable Instruments Braids and Plaits macro oscillators with a powerful 4x4 modulation matrix, filters, full envelope/LFO control, and several effects. It was created to provide complex modulation routing and sound design capabilities not found in the standalone Braids or Plaits plugins.
 
 ### Architecture
 
