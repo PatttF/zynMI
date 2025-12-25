@@ -1,6 +1,6 @@
 # Zynthian & VST plugins
 
-zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instruments, Chaos Engine random generator, and Mutated Sequences rhythm generator. Thanks go out to Mutable Instruments and Zynthian. 
+zynMI (for Zynthian), VST3(Windows and Linux) plugins featuring Mutated Instruments, Chaos Engine random generator, and Mutated Sequences rhythm generator. Thanks go out to Mutable Instruments, AirWindows, and Zynthian. 
 
 
 
