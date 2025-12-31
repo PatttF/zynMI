@@ -3,34 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mutated Instruments | Plaits & Braids with AirWindows</title>
+    <title>Mutated Instruments | Advanced Synth Plugin</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --primary: #00ff00;
-            --secondary: #00ffff;
-            --accent: #ff00ff;
-            --dark: #0a0a0a;
-            --darker: #000000;
-            --light: #ffffff;
-            --gray: #333333;
-            --border: #444444;
+            --secondary: #00cc00;
+            --accent: #00ff9d;
+            --dark: #0a1414;
+            --darker: #050a0a;
+            --light: #e0f0f0;
+            --border: rgba(0, 255, 0, 0.2);
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Courier New', monospace;
         }
 
         body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--darker);
             color: var(--light);
             overflow-x: hidden;
             background-image: 
-                linear-gradient(rgba(0, 255, 0, 0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 255, 0, 0.02) 1px, transparent 1px);
-            background-size: 20px 20px;
+                radial-gradient(circle at 10% 20%, rgba(0, 255, 0, 0.05) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(0, 255, 0, 0.05) 0%, transparent 20%);
+            background-attachment: fixed;
         }
 
         .container {
@@ -40,131 +40,120 @@
             padding: 0 20px;
         }
 
-        /* Header Styles */
+        /* Header & Navigation */
         header {
-            background-color: var(--dark);
-            border-bottom: 2px solid var(--primary);
-            padding: 15px 0;
-            position: sticky;
+            background-color: rgba(0, 10, 10, 0.8);
+            backdrop-filter: blur(10px);
+            position: fixed;
+            width: 100%;
             top: 0;
-            z-index: 100;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+            z-index: 1000;
+            border-bottom: 1px solid var(--border);
         }
 
         .navbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
+            padding: 20px 0;
         }
 
         .logo {
             font-size: 1.8rem;
-            font-weight: bold;
+            font-weight: 700;
             color: var(--primary);
             text-decoration: none;
-            letter-spacing: 2px;
-            border: 1px solid var(--primary);
-            padding: 5px 10px;
-            transition: all 0.3s ease;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        .logo:hover {
-            color: var(--secondary);
-            border-color: var(--secondary);
-            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        .logo::before {
+            content: "🎵";
         }
 
         .nav-links {
             display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
+            gap: 25px;
+            list-style: none;
         }
 
         .nav-links a {
             color: var(--light);
             text-decoration: none;
-            font-size: 1rem;
-            padding: 8px 12px;
-            border: 1px solid var(--border);
+            font-weight: 500;
             transition: all 0.3s ease;
+            position: relative;
+            padding: 5px 0;
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background-color: var(--primary);
+            transition: width 0.3s ease;
         }
 
         .nav-links a:hover {
             color: var(--primary);
-            border-color: var(--primary);
-            background-color: rgba(0, 255, 0, 0.1);
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
         }
 
         /* Hero Section */
         .hero {
-            padding: 60px 0;
+            padding: 150px 0 100px;
             text-align: center;
             position: relative;
             overflow: hidden;
         }
 
-        .hero::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(45deg, transparent 49%, rgba(0, 255, 0, 0.1) 50%, transparent 51%);
-            background-size: 20px 20px;
-            z-index: -1;
-        }
-
         .hero h1 {
-            font-size: 2.5rem;
+            font-size: 3.5rem;
             margin-bottom: 20px;
-            text-transform: uppercase;
-            letter-spacing: 3px;
-            color: var(--primary);
-            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-            animation: pulse 2s infinite;
+            background: linear-gradient(to right, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: glow 2s infinite alternate;
         }
 
-        @keyframes pulse {
-            0% { opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { opacity: 0.8; }
+        @keyframes glow {
+            from { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00; }
+            to { text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00; }
         }
 
         .hero p {
             font-size: 1.2rem;
-            max-width: 800px;
-            margin: 0 auto 30px;
-            line-height: 1.6;
+            max-width: 700px;
+            margin: 0 auto 40px;
             color: var(--light);
-            border: 1px solid var(--border);
-            padding: 20px;
-            background-color: rgba(0, 0, 0, 0.3);
+            line-height: 1.6;
         }
 
         .cta-button {
             display: inline-block;
-            background-color: var(--darker);
-            color: var(--primary);
-            border: 2px solid var(--primary);
-            padding: 15px 30px;
-            font-size: 1.2rem;
+            background: linear-gradient(45deg, var(--primary), var(--accent));
+            color: var(--darker);
+            padding: 15px 40px;
+            border-radius: 30px;
             text-decoration: none;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1px;
             transition: all 0.3s ease;
-            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0, 255, 0, 0.3);
             position: relative;
             overflow: hidden;
-        }
-
-        .cta-button:hover {
-            background-color: var(--primary);
-            color: var(--darker);
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-            transform: translateY(-3px);
+            border: none;
+            cursor: pointer;
         }
 
         .cta-button::after {
@@ -176,6 +165,11 @@
             height: 100%;
             background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
             transition: 0.5s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 255, 0, 0.4);
         }
 
         .cta-button:hover::after {
@@ -265,6 +259,86 @@
         .feature-card p {
             color: var(--light);
             line-height: 1.6;
+        }
+
+        /* Synth Showcase */
+        .synth-showcase {
+            padding: 60px 0;
+            background-color: rgba(0, 15, 15, 0.7);
+            border-top: 1px solid var(--border);
+        }
+
+        .synth-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .synth-card {
+            background: rgba(0, 20, 20, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 25px;
+            width: 280px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .synth-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--primary);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+
+        .synth-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .synth-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: 0 10px 20px rgba(0, 255, 0, 0.1);
+        }
+
+        .synth-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: var(--accent);
+        }
+
+        .synth-card h3 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+
+        .synth-card p {
+            color: var(--light);
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .synth-card .code-block {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            padding: 15px;
+            border-radius: 5px;
+            text-align: left;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin-top: 15px;
+            overflow-x: auto;
         }
 
         /* Download Section */
@@ -437,6 +511,11 @@
             .features-grid {
                 grid-template-columns: 1fr;
             }
+            
+            .synth-container {
+                flex-direction: column;
+                align-items: center;
+            }
         }
 
         /* Glitch Effect */
@@ -486,6 +565,32 @@
             50% { width: 75%; }
             100% { width: 100%; }
         }
+
+        /* Node.js Integration */
+        .node-integration {
+            background: rgba(0, 20, 20, 0.5);
+            border: 1px solid var(--border);
+            padding: 25px;
+            margin: 40px 0;
+            border-radius: 10px;
+        }
+
+        .node-integration h3 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .node-code {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            padding: 20px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
@@ -493,30 +598,30 @@
     
     <header>
         <div class="container navbar">
-            <a href="#" class="logo glitch">SYNTHESIS</a>
+            <a href="#" class="logo glitch">MUTATED INSTRUMENTS</a>
             <nav class="nav-links">
-                <a href="#">Home</a>
-                <a href="#">Features</a>
-                <a href="#">Download</a>
-                <a href="#">Documentation</a>
-                <a href="#">Support</a>
+                <a href="#features">Features</a>
+                <a href="#synths">Synths</a>
+                <a href="#download">Download</a>
+                <a href="#docs">Documentation</a>
+                <a href="#support">Support</a>
             </nav>
         </div>
     </header>
 
     <section class="hero">
         <div class="container">
-            <h1>SYNTHESIS v2.0</h1>
-            <p>Advanced Audio Processing Engine with Real-time Synthesis Capabilities. Integrate seamlessly with modern DAWs and audio applications.</p>
-            <a href="#" class="cta-button">Download Now</a>
+            <h1>Mutated Instruments</h1>
+            <p>Advanced Node.js-powered synth engine with built-in modular synthesis capabilities. Experience the future of audio processing in your applications.</p>
+            <a href="#download" class="cta-button">Download Now</a>
         </div>
     </section>
 
-    <section class="features">
+    <section class="features" id="features">
         <div class="container">
             <div class="section-title">
-                <h2>Features</h2>
-                <p>Powerful capabilities for audio synthesis and processing</p>
+                <h2>Advanced Features</h2>
+                <p>Premium capabilities for modern audio applications</p>
             </div>
             <div class="features-grid">
                 <div class="feature-card">
@@ -538,11 +643,85 @@
         </div>
     </section>
 
-    <section class="download">
+    <section class="synth-showcase" id="synths">
+        <div class="container">
+            <div class="section-title">
+                <h2>Built-in Synths</h2>
+                <p>Powerful Node.js-based synthesizer engines</p>
+            </div>
+            
+            <div class="synth-container">
+                <div class="synth-card">
+                    <div class="synth-icon">🎹</div>
+                    <h3>Wavetable Synth</h3>
+                    <p>High-quality wavetable synthesis with 128 presets and real-time modulation.</p>
+                    <div class="code-block">
+                        const synth = new MutatedInstruments.WavetableSynth();<br>
+                        synth.setWaveform('sine');<br>
+                        synth.playNote('C4', 0.5);<br>
+                        synth.setModulationDepth(0.3);
+                    </div>
+                </div>
+                
+                <div class="synth-card">
+                    <div class="synth-icon">🔊</div>
+                    <h3>Granular Synth</h3>
+                    <p>Advanced granular synthesis engine for textural sound manipulation.</p>
+                    <div class="code-block">
+                        const granulator = new MutatedInstruments.GranularSynth();<br>
+                        granulator.setGrainSize(100);<br>
+                        granulator.setDensity(50);<br>
+                        granulator.play('audio-file.wav');
+                    </div>
+                </div>
+                
+                <div class="synth-card">
+                    <div class="synth-icon">🎵</div>
+                    <h3>FM Synth</h3>
+                    <p>Full-featured frequency modulation engine with 16 operators.</p>
+                    <div class="code-block">
+                        const fmSynth = new MutatedInstruments.FMSynth();<br>
+                        fmSynth.setOperator(1, { ratio: 2.0, modulation: 0.5 });<br>
+                        fmSynth.setOperator(2, { ratio: 0.5, modulation: 0.3 });<br>
+                        fmSynth.playNote('E5');
+                    </div>
+                </div>
+            </div>
+            
+            <div class="node-integration">
+                <h3>Node.js Integration</h3>
+                <p>Seamlessly integrate Mutated Instruments into your Node.js applications:</p>
+                <div class="node-code">
+                    // Install the package<br>
+                    npm install mutated-instruments<br><br>
+                    
+                    // Basic usage in Node.js<br>
+                    const MutatedInstruments = require('mutated-instruments');<br><br>
+                    
+                    // Create a synth instance<br>
+                    const synth = new MutatedInstruments.Synth('wavetable');<br><br>
+                    
+                    // Configure parameters<br>
+                    synth.setVolume(0.7);<br>
+                    synth.setAttackTime(0.1);<br><br>
+                    
+                    // Play a note<br>
+                    synth.playNote('C4', 0.5);<br><br>
+                    
+                    // Process audio in real-time<br>
+                    synth.on('audio', (buffer) => {<br>
+                      &nbsp;&nbsp;processAudio(buffer);<br>
+                    });
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="download" id="download">
         <div class="container">
             <div class="download-card">
                 <h2>Get Started</h2>
-                <p>Download the latest version of SYNTHESIS for your operating system.</p>
+                <p>Download the latest version of Mutated Instruments for your operating system.</p>
                 
                 <div class="platforms">
                     <a href="#" class="platform">
@@ -564,22 +743,22 @@
         </div>
     </section>
 
-    <footer>
+    <footer id="support">
         <div class="container">
             <div class="footer-content">
                 <div class="footer-column">
-                    <h3>About SYNTHESIS</h3>
-                    <p>SYNTHESIS is a cutting-edge audio processing engine designed for professional audio applications and real-time synthesis.</p>
+                    <h3>About Mutated Instruments</h3>
+                    <p>Mutated Instruments is a cutting-edge audio processing engine designed for Node.js applications and real-time synthesis in modern development environments.</p>
                     <div class="social-links">
-                        <a href="#">📘</a>
-                        <a href="#">🐦</a>
-                        <a href="#">📷</a>
+                        <a href="#"><i class="fab fa-github"></i></a>
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-discord"></i></a>
                     </div>
                 </div>
                 <div class="footer-column">
                     <h3>Quick Links</h3>
                     <ul>
-                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#docs">Documentation</a></li>
                         <li><a href="#">API Reference</a></li>
                         <li><a href="#">Community Forum</a></li>
                         <li><a href="#">Support Center</a></li>
@@ -596,10 +775,40 @@
                 </div>
             </div>
             <div class="copyright">
-                <p>&copy; 2024 SYNTHESIS Audio Technologies. All rights reserved.</p>
+                <p>&copy; 2024 Mutated Instruments. All rights reserved.</p>
             </div>
         </div>
     </footer>
 
+    <script>
+        // Simple synth visualization
+        document.addEventListener('DOMContentLoaded', function() {
+            const synthCards = document.querySelectorAll('.synth-card');
+            
+            synthCards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-5px)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                });
+            });
+            
+            // Smooth scrolling for anchor links
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        window.scrollTo({
+                            top: target.offsetTop - 80,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
+        });
+    </script>
 </body>
 </html>
