@@ -3,28 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mutated Instruments - Plaits & Braids with AirWindows Effects</title>
+    <title>Mutated Instruments | Plaits & Braids with AirWindows</title>
     <style>
         :root {
-            --primary-dark: #0a0a15;
-            --secondary-dark: #121220;
-            --accent-teal: #00d7a0;
-            --accent-purple: #b869ff;
-            --text-light: #ffffff;
-            --text-gray: #a0a0b0;
+            --primary: #00ff00;
+            --secondary: #00ffff;
+            --accent: #ff00ff;
+            --dark: #0a0a0a;
+            --darker: #000000;
+            --light: #ffffff;
+            --gray: #333333;
+            --border: #444444;
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Courier New', monospace;
         }
 
         body {
-            background-color: var(--primary-dark);
-            color: var(--text-light);
-            line-height: 1.6;
+            background-color: var(--darker);
+            color: var(--light);
+            overflow-x: hidden;
+            background-image: 
+                linear-gradient(rgba(0, 255, 0, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 0, 0.02) 1px, transparent 1px);
+            background-size: 20px 20px;
         }
 
         .container {
@@ -36,215 +42,340 @@
 
         /* Header Styles */
         header {
-            background-color: var(--secondary-dark);
-            padding: 20px 0;
+            background-color: var(--dark);
+            border-bottom: 2px solid var(--primary);
+            padding: 15px 0;
             position: sticky;
             top: 0;
             z-index: 100;
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(184, 105, 255, 0.1);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
         }
 
         .navbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--text-light);
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--primary);
             text-decoration: none;
+            letter-spacing: 2px;
+            border: 1px solid var(--primary);
+            padding: 5px 10px;
+            transition: all 0.3s ease;
         }
 
-        .logo-icon {
-            color: var(--accent-teal);
+        .logo:hover {
+            color: var(--secondary);
+            border-color: var(--secondary);
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
         }
 
         .nav-links {
             display: flex;
-            gap: 30px;
+            gap: 20px;
+            flex-wrap: wrap;
         }
 
         .nav-links a {
-            color: var(--text-gray);
+            color: var(--light);
             text-decoration: none;
-            font-weight: 500;
-            transition: color 0.3s ease;
+            font-size: 1rem;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
         }
 
         .nav-links a:hover {
-            color: var(--accent-teal);
+            color: var(--primary);
+            border-color: var(--primary);
+            background-color: rgba(0, 255, 0, 0.1);
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
         }
 
         /* Hero Section */
         .hero {
-            padding: 80px 0;
+            padding: 60px 0;
             text-align: center;
-            background: linear-gradient(135deg, rgba(184, 105, 255, 0.1) 0%, rgba(0, 215, 160, 0.1) 100%);
-            border-bottom: 1px solid rgba(184, 105, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, transparent 49%, rgba(0, 255, 0, 0.1) 50%, transparent 51%);
+            background-size: 20px 20px;
+            z-index: -1;
         }
 
         .hero h1 {
-            font-size: 3rem;
+            font-size: 2.5rem;
             margin-bottom: 20px;
-            background: linear-gradient(90deg, var(--accent-teal), var(--accent-purple));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { opacity: 0.8; }
         }
 
         .hero p {
             font-size: 1.2rem;
-            max-width: 700px;
-            margin: 0 auto 40px;
-            color: var(--text-gray);
+            max-width: 800px;
+            margin: 0 auto 30px;
+            line-height: 1.6;
+            color: var(--light);
+            border: 1px solid var(--border);
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.3);
         }
 
         .cta-button {
             display: inline-block;
-            background: linear-gradient(90deg, var(--accent-teal), var(--accent-purple));
-            color: white;
+            background-color: var(--darker);
+            color: var(--primary);
+            border: 2px solid var(--primary);
             padding: 15px 30px;
-            border-radius: 50px;
+            font-size: 1.2rem;
             text-decoration: none;
-            font-weight: 600;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            border: none;
-            cursor: pointer;
-            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            position: relative;
+            overflow: hidden;
         }
 
         .cta-button:hover {
+            background-color: var(--primary);
+            color: var(--darker);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
             transform: translateY(-3px);
-            box-shadow: 0 10px 20px rgba(0, 215, 160, 0.2);
+        }
+
+        .cta-button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: 0.5s;
+        }
+
+        .cta-button:hover::after {
+            left: 100%;
         }
 
         /* Features Section */
         .features {
-            padding: 80px 0;
+            padding: 60px 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
         }
 
         .section-title {
             text-align: center;
-            margin-bottom: 60px;
+            margin-bottom: 40px;
         }
 
         .section-title h2 {
-            font-size: 2.5rem;
-            margin-bottom: 15px;
+            font-size: 2rem;
+            color: var(--secondary);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
 
         .section-title p {
-            color: var(--text-gray);
-            max-width: 600px;
-            margin: 0 auto;
+            color: var(--light);
+            font-size: 1.1rem;
         }
 
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 30px;
+            margin-top: 30px;
         }
 
         .feature-card {
-            background: var(--secondary-dark);
-            border-radius: 15px;
-            padding: 30px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            padding: 25px;
             text-align: center;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            border: 1px solid rgba(184, 105, 255, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: var(--primary);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover::before {
+            transform: scaleX(1);
         }
 
         .feature-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+            border-color: var(--primary);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 255, 0, 0.1);
         }
 
         .feature-icon {
             font-size: 3rem;
             margin-bottom: 20px;
-            color: var(--accent-teal);
+            color: var(--accent);
         }
 
         .feature-card h3 {
             font-size: 1.5rem;
+            color: var(--primary);
             margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .feature-card p {
-            color: var(--text-gray);
+            color: var(--light);
+            line-height: 1.6;
         }
 
         /* Download Section */
         .download {
-            padding: 80px 0;
-            background: var(--secondary-dark);
-            border-top: 1px solid rgba(184, 105, 255, 0.1);
+            padding: 60px 0;
+            text-align: center;
         }
 
         .download-card {
-            background: linear-gradient(135deg, rgba(184, 105, 255, 0.1) 0%, rgba(0, 215, 160, 0.1) 100%);
-            border-radius: 15px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
             padding: 40px;
-            text-align: center;
             max-width: 600px;
             margin: 0 auto;
         }
 
         .download-card h2 {
             font-size: 2rem;
+            color: var(--secondary);
             margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .download-card p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            line-height: 1.6;
         }
 
         .platforms {
             display: flex;
             justify-content: center;
             gap: 20px;
+            flex-wrap: wrap;
             margin: 30px 0;
         }
 
         .platform {
             display: flex;
-            flex-direction: column;
             align-items: center;
             gap: 10px;
-            color: var(--text-gray);
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border);
+            padding: 15px 20px;
+            color: var(--light);
             text-decoration: none;
-            transition: color 0.3s ease;
+            transition: all 0.3s ease;
         }
 
         .platform:hover {
-            color: var(--accent-teal);
+            border-color: var(--primary);
+            color: var(--primary);
+            background-color: rgba(0, 255, 0, 0.1);
+            transform: translateY(-3px);
         }
 
         .platform-icon {
-            font-size: 2rem;
-            color: var(--accent-teal);
+            font-size: 1.5rem;
         }
 
         /* Footer */
         footer {
-            background: var(--secondary-dark);
-            padding: 60px 0 30px;
-            border-top: 1px solid rgba(184, 105, 255, 0.1);
+            background-color: var(--dark);
+            border-top: 2px solid var(--primary);
+            padding: 40px 0 20px;
         }
 
         .footer-content {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 40px;
-            margin-bottom: 40px;
+            gap: 30px;
+            margin-bottom: 30px;
         }
 
         .footer-column h3 {
-            font-size: 1.3rem;
+            color: var(--primary);
             margin-bottom: 20px;
-            color: var(--accent-teal);
+            font-size: 1.3rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .footer-column p {
+            color: var(--light);
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 15px;
+        }
+
+        .social-links a {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--light);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .social-links a:hover {
+            color: var(--primary);
+            border-color: var(--primary);
+            background-color: rgba(0, 255, 0, 0.1);
         }
 
         .footer-column ul {
@@ -252,49 +383,45 @@
         }
 
         .footer-column ul li {
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
 
         .footer-column ul li a {
-            color: var(--text-gray);
-            text-decoration: none;
-            transition: color 0.3s ease;
-        }
-
-        .footer-column ul li a:hover {
-            color: var(var(--accent-teal));
-        }
-
-        .social-links {
-            display: flex;
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .social-links a {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: rgba(184, 105, 255, 0.1);
-            color: var(--text-gray);
+            color: var(--light);
             text-decoration: none;
             transition: all 0.3s ease;
         }
 
-        .social-links a:hover {
-            background: var(--accent-teal);
-            color: white;
-            transform: translateY(-3px);
+        .footer-column ul li a:hover {
+            color: var(--primary);
+            padding-left: 5px;
         }
 
         .copyright {
             text-align: center;
-            padding-top: 30px;
-            border-top: 1px solid rgba(184, 105, 255, 0.1);
-            color: var(--text-gray);
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            color: var(--light);
+            font-size: 0.9rem;
+        }
+
+        /* Scanline Effect */
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(0, 255, 0, 0.05) 1px, transparent 1px);
+            background-size: 100% 3px;
+            pointer-events: none;
+            z-index: 9999;
+            animation: scan 8s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100%; }
         }
 
         /* Responsive Design */
@@ -304,140 +431,175 @@
             }
             
             .nav-links {
-                gap: 15px;
+                gap: 10px;
             }
             
-            .platforms {
-                flex-direction: column;
-                align-items: center;
+            .features-grid {
+                grid-template-columns: 1fr;
             }
         }
 
-        @media (max-width: 480px) {
-            .hero h1 {
-                font-size: 1.5rem;
-            }
-            
-            .section-title h2 {
-                font-size: 2rem;
-            }
-            
-            .cta-button {
-                padding: 12px 24px;
-            }
+        /* Glitch Effect */
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+
+        .glitch {
+            animation: glitch 5s infinite;
+        }
+
+        /* Terminal Style */
+        .terminal {
+            font-family: 'Courier New', monospace;
+            background-color: #000;
+            color: #0f0;
+            padding: 20px;
+            border: 1px solid var(--primary);
+            margin: 20px 0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+
+        /* Progress bar */
+        .progress-bar {
+            width: 100%;
+            height: 3px;
+            background-color: var(--border);
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .progress {
+            height: 100%;
+            background-color: var(--primary);
+            width: 75%;
+            animation: progress 3s ease-in-out infinite;
+        }
+
+        @keyframes progress {
+            0% { width: 0; }
+            50% { width: 75%; }
+            100% { width: 100%; }
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
+    <div class="scanline"></div>
+    
     <header>
         <div class="container navbar">
-            <a href="#" class="logo">
-                <span class="logo-icon">🎵</span>
-                Mutated Instruments
-            </a>
+            <a href="#" class="logo glitch">SYNTHESIS</a>
             <nav class="nav-links">
-                <a href="#features">Features</a>
-                <a href="#download">Download</a>
-                <a href="https://github.com/Patchwork-Community/Mutated-Instruments" target="_blank">GitHub</a>
+                <a href="#">Home</a>
+                <a href="#">Features</a>
+                <a href="#">Download</a>
+                <a href="#">Documentation</a>
+                <a href="#">Support</a>
             </nav>
         </div>
     </header>
 
-    <!-- Hero Section -->
     <section class="hero">
         <div class="container">
-            <h1>Plaits & Braids with AirWindows Effects</h1>
-            <p>A community-driven project combining the power of Plaits and Braids synthesizers with the versatility of AirWindows effects for professional audio processing.</p>
-            <a href="https://github.com/Patchwork-Community/Mutated-Instruments/releases" class="cta-button">Download Now</a>
+            <h1>SYNTHESIS v2.0</h1>
+            <p>Advanced Audio Processing Engine with Real-time Synthesis Capabilities. Integrate seamlessly with modern DAWs and audio applications.</p>
+            <a href="#" class="cta-button">Download Now</a>
         </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="features" id="features">
+    <section class="features">
         <div class="container">
             <div class="section-title">
-                <h2>Powerful Features</h2>
-                <p>Experience the fusion of classic synthesizers with modern audio effects</p>
+                <h2>Features</h2>
+                <p>Powerful capabilities for audio synthesis and processing</p>
             </div>
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="feature-icon">🎛️</div>
-                    <h3>Plaits Integration</h3>
-                    <p>Full integration with Mutable Instruments Plaits for rich, evolving sounds and textures.</p>
+                    <h3>Real-time Synthesis</h3>
+                    <p>Process audio in real-time with sub-millisecond latency for professional applications.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">🎹</div>
-                    <h3>Braids Integration</h3>
-                    <p>Seamless compatibility with Mutable Instruments Braids for complex waveform manipulation.</p>
+                    <div class="feature-icon">🎵</div>
+                    <h3>Modular Architecture</h3>
+                    <p>Flexible modular design allowing for custom audio processing chains and effects.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">🔊</div>
-                    <h3>AirWindows Effects</h3>
-                    <p>Access to a vast library of high-quality audio effects from the AirWindows collection.</p>
+                    <div class="feature-icon">⚡</div>
+                    <h3>High Performance</h3>
+                    <p>Built with optimized algorithms for maximum performance on modern hardware.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Download Section -->
-    <section class="download" id="download">
+    <section class="download">
         <div class="container">
             <div class="download-card">
-                <h2>Get Started Today</h2>
-                <p>Download Mutated Instruments and start creating professional sounds with the power of Plaits, Braids, and AirWindows effects.</p>
+                <h2>Get Started</h2>
+                <p>Download the latest version of SYNTHESIS for your operating system.</p>
                 
                 <div class="platforms">
-                    <a href="https://github.com/Patchwork-Community/Mutated-Instruments/releases" class="platform">
-                        <div class="platform-icon">📦</div>
-                        <span>GitHub Releases</span>
+                    <a href="#" class="platform">
+                        <span class="platform-icon">🖥️</span>
+                        <span>Windows x64</span>
                     </a>
-                    <a href="https://github.com/Patchwork-Community/Mutated-Instruments" class="platform">
-                        <div class="platform-icon">📝</div>
-                        <span>Documentation</span>
+                    <a href="#" class="platform">
+                        <span class="platform-icon">🍎</span>
+                        <span>macOS</span>
+                    </a>
+                    <a href="#" class="platform">
+                        <span class="platform-icon">🐧</span>
+                        <span>Linux</span>
                     </a>
                 </div>
                 
-                <p>Join our growing community of audio creators and developers.</p>
+                <p>Requirements: Windows 10+, macOS 10.15+, Linux (64-bit)</p>
             </div>
         </div>
     </section>
 
-    <!-- Footer -->
     <footer>
         <div class="container">
             <div class="footer-content">
                 <div class="footer-column">
-                    <h3>Mutated Instruments</h3>
-                    <p>A community-driven project combining Plaits, Braids, and AirWindows for professional audio processing.</p>
+                    <h3>About SYNTHESIS</h3>
+                    <p>SYNTHESIS is a cutting-edge audio processing engine designed for professional audio applications and real-time synthesis.</p>
                     <div class="social-links">
-                        <a href="https://github.com/Patchwork-Community/Mutated-Instruments" target="_blank">GitHub</a>
+                        <a href="#">📘</a>
+                        <a href="#">🐦</a>
+                        <a href="#">📷</a>
                     </div>
                 </div>
-                
+                <div class="footer-column">
+                    <h3>Quick Links</h3>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">API Reference</a></li>
+                        <li><a href="#">Community Forum</a></li>
+                        <li><a href="#">Support Center</a></li>
+                    </ul>
+                </div>
                 <div class="footer-column">
                     <h3>Resources</h3>
                     <ul>
-                        <li><a href="https://github.com/Patchwork-Community/Mutated-Instruments" target="_blank">Documentation</a></li>
-                        <li><a href="https://github.com/Patchwork-Community/Mutated-Instruments/issues" target="_blank">Issues</a></li>
-                        <li><a href="https://github.com/Patchwork-Community/Mutated-Instruments/wiki" target="_blank">Wiki</a></li>
-                    </ul>
-                </div>
-                
-                <div class="footer-column">
-                    <h3>Community</h3>
-                    <ul>
-                        <li><a href="https://github.com/Patchwork-Community/Mutated-Instruments/issues" target="_blank">Report Issues</a></li>
-                        <li><a href="https://github.com/Patchwork-Community/Mutated-Instruments/pulls" target="_blank">Pull Requests</a></li>
-                        <li><a href="https://github.com/Patchwork-Community/Mutated-Instruments/graphs/contributors" target="_blank">Contributors</a></li>
+                        <li><a href="#">Tutorials</a></li>
+                        <li><a href="#">Sample Projects</a></li>
+                        <li><a href="#">Developer Guide</a></li>
+                        <li><a href="#">Release Notes</a></li>
                     </ul>
                 </div>
             </div>
-            
             <div class="copyright">
-                <p>&copy; 2023 Mutated Instruments. All rights reserved.</p>
+                <p>&copy; 2024 SYNTHESIS Audio Technologies. All rights reserved.</p>
             </div>
         </div>
     </footer>
+
 </body>
 </html>
